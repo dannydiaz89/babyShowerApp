@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { assertServer } from "./guard";
 
@@ -16,13 +16,25 @@ const POLICY = {
 
 export type Role = keyof typeof POLICY;
 
+const verdict = v.object({ blocked: v.boolean(), retryAfterMs: v.number() });
+
 function policyFor(role: string) {
   return POLICY[role as Role] ?? POLICY.admin;
 }
 
-/** Is this client currently locked out? */
-export const check = query({
+/**
+ * Is this client currently locked out?
+ *
+ * A mutation rather than a query on purpose. Convex reruns a query when the
+ * data it read changes, never merely because time has passed, so a cached
+ * `{blocked: true}` would outlive the lock it describes — and nothing on the
+ * sign-in path writes to the row while a client is locked out, so nothing
+ * would ever invalidate it. Reading the clock here also lets an expired lock
+ * be cleared the moment it is noticed, instead of lingering on the row.
+ */
+export const check = mutation({
   args: { key: v.string(), id: v.string() },
+  returns: verdict,
   handler: async (ctx, { key, id }) => {
     assertServer(key);
 
@@ -31,10 +43,14 @@ export const check = query({
       .withIndex("by_key", (q) => q.eq("key", id))
       .unique();
 
+    if (!row?.lockedUntil) return { blocked: false, retryAfterMs: 0 };
+
     const now = Date.now();
-    if (!row?.lockedUntil || row.lockedUntil <= now) {
+    if (row.lockedUntil <= now) {
+      await ctx.db.patch(row._id, { lockedUntil: undefined });
       return { blocked: false, retryAfterMs: 0 };
     }
+
     return { blocked: true, retryAfterMs: row.lockedUntil - now };
   },
 });
@@ -42,6 +58,7 @@ export const check = query({
 /** Record a wrong password and lock the client out once it gets suspicious. */
 export const fail = mutation({
   args: { key: v.string(), id: v.string(), role: v.string() },
+  returns: verdict,
   handler: async (ctx, { key, id, role }) => {
     assertServer(key);
 
@@ -81,6 +98,7 @@ export const fail = mutation({
 /** A correct password clears the counter. */
 export const succeed = mutation({
   args: { key: v.string(), id: v.string() },
+  returns: v.null(),
   handler: async (ctx, { key, id }) => {
     assertServer(key);
 
@@ -90,6 +108,7 @@ export const succeed = mutation({
       .unique();
 
     if (row) await ctx.db.delete(row._id);
+    return null;
   },
 });
 
@@ -105,6 +124,7 @@ export const consume = mutation({
     limit: v.number(),
     windowMs: v.number(),
   },
+  returns: v.object({ allowed: v.boolean(), retryAfterMs: v.number() }),
   handler: async (ctx, { key, id, limit, windowMs }) => {
     assertServer(key);
 

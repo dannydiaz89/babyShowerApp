@@ -11,9 +11,9 @@ import { isAdminSession } from "@/lib/session";
  */
 const ACCENT_STYLES: Record<string, string> = {
   sage: "bg-accent-soft text-accent",
-  clay: "bg-[#f5e4db] text-[#9c5130]",
-  amber: "bg-[#f7edd6] text-gold-ink",
-  sky: "bg-[#e2eef2] text-[#2c5867]",
+  clay: "bg-registry-clay text-registry-clay-ink",
+  amber: "bg-registry-amber text-gold-ink",
+  sky: "bg-registry-sky text-registry-sky-ink",
 };
 
 export default async function RegistryPage() {

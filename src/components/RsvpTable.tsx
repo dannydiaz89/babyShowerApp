@@ -62,12 +62,10 @@ export function RsvpTable({
   rsvps,
   t,
   mealOptions,
-  askMeal,
 }: {
   rsvps: RsvpRow[];
   t: Dictionary;
   mealOptions: string[];
-  askMeal: boolean;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [keepId, setKeepId] = useState<string | null>(null);

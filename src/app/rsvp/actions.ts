@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { api } from "../../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
 import { getTranslation } from "@/lib/i18n";
+import { hasGuestAccess } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 
 export type RsvpState = {
@@ -39,6 +40,17 @@ export async function submitRsvp(
   formData: FormData
 ): Promise<RsvpState> {
   const [{ t }, settings] = await Promise.all([getTranslation(), getSettings()]);
+
+  /*
+   * Middleware keeps strangers off /rsvp, but it does not run for Server
+   * Actions: this function is its own public POST endpoint, callable without
+   * ever loading the page. Without this check anyone could file RSVPs under
+   * other people's names — or, because a matching email or phone updates the
+   * existing row, overwrite a reply they can guess the address of.
+   */
+  if (!(await hasGuestAccess())) {
+    return { status: "error", message: t.rsvp.errSignedOut };
+  }
 
   const name = text(formData, "name");
   const email = text(formData, "email");

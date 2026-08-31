@@ -2,6 +2,7 @@
 
 import { useActionState, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
 import {
   SETTINGS_TABS,
@@ -206,6 +207,9 @@ function Toggle({
 
 /* -------------------------------------------------------------------- form */
 
+/** One panel is mounted at a time, so one id serves every tab. */
+const panelId = "settings-panel";
+
 /**
  * Each tab's fields in their own form, so Save applies to that tab alone.
  *
@@ -287,9 +291,15 @@ export function SettingsForm({
     status: "idle",
   });
 
+  const router = useRouter();
   const [tab, setTab] = useState<SettingsTab>("event");
   const [dirty, setDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<SettingsTab | null>(null);
+  /** What to do if the host chooses "discard" — leave, rather than switch tab. */
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  // Set while carrying out a discarded navigation, so the guard below lets the
+  // second attempt through instead of catching it again.
+  const leavingRef = useRef(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   // Rows are keyed so removing one doesn't remount the others.
@@ -344,6 +354,60 @@ export function SettingsForm({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  /*
+   * Client-side navigation never unloads the document, so `beforeunload` does
+   * not fire for it: the header's Dashboard, View site and brand links, and
+   * its sign-out form, would each drop unsaved edits without a word. Caught
+   * here at the document rather than by rewiring the header, so any link or
+   * form added to an admin page later is covered by the same rule.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+
+    const ask = (leave: () => void) => {
+      setPendingTab(null);
+      setPendingLeave(() => leave);
+      dialogRef.current?.showModal();
+    };
+
+    const onClick = (event: MouseEvent) => {
+      if (leavingRef.current || event.defaultPrevented) return;
+      // Anything that opens elsewhere — new tab, download, modified click —
+      // leaves this page as it is.
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target;
+      const anchor =
+        target instanceof Element ? target.closest("a[href]") : null;
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank") return;
+
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname) return;
+
+      event.preventDefault();
+      ask(() => router.push(`${url.pathname}${url.search}`));
+    };
+
+    const onSubmit = (event: SubmitEvent) => {
+      if (leavingRef.current) return;
+      const form = event.target;
+      // The settings form itself is how edits are saved, not lost.
+      if (!(form instanceof HTMLFormElement) || form.id === panelId) return;
+
+      event.preventDefault();
+      ask(() => form.requestSubmit());
+    };
+
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("submit", onSubmit, true);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("submit", onSubmit, true);
+    };
+  }, [dirty, router]);
+
   function requestTab(next: SettingsTab) {
     if (next === tab) return;
     if (dirty) {
@@ -363,10 +427,18 @@ export function SettingsForm({
     if (pendingTab) setTab(pendingTab);
     setPendingTab(null);
     dialogRef.current?.close();
+
+    if (pendingLeave) {
+      // The listener is removed by its own cleanup, which has not run yet.
+      leavingRef.current = true;
+      pendingLeave();
+      setPendingLeave(null);
+    }
   }
 
   function stay() {
     setPendingTab(null);
+    setPendingLeave(null);
     dialogRef.current?.close();
   }
 
@@ -387,8 +459,6 @@ export function SettingsForm({
     setNextKey((n) => n + 1);
     setDirty(true);
   }
-
-  const panelId = "settings-panel";
 
   return (
     <div className="space-y-5">
@@ -444,28 +514,28 @@ export function SettingsForm({
             defaultValue={settings.mapsQuery}
           />
           <div className="grid gap-4 lg:grid-cols-2">
-            <div>
-              <Label htmlFor="settings-start">{t.settings.start}</Label>
-              <DateTimeField
-                id="settings-start"
-                name="startISO"
-                value={settings.startISO}
-                locale={intlLocale}
-                dateLabels={dateLabels}
-                timeLabels={timeLabels}
-              />
-            </div>
-            <div>
-              <Label htmlFor="settings-end">{t.settings.end}</Label>
-              <DateTimeField
-                id="settings-end"
-                name="endISO"
-                value={settings.endISO}
-                locale={intlLocale}
-                dateLabels={dateLabels}
-                timeLabels={timeLabels}
-              />
-            </div>
+            <DateTimeField
+              id="settings-start"
+              name="startISO"
+              legend={t.settings.start}
+              value={settings.startISO}
+              locale={intlLocale}
+              dateLabels={dateLabels}
+              timeLabels={timeLabels}
+              dateFieldLabel={t.settings.dateInput}
+              timeFieldLabel={t.settings.timeInput}
+            />
+            <DateTimeField
+              id="settings-end"
+              name="endISO"
+              legend={t.settings.end}
+              value={settings.endISO}
+              locale={intlLocale}
+              dateLabels={dateLabels}
+              timeLabels={timeLabels}
+              dateFieldLabel={t.settings.dateInput}
+              timeFieldLabel={t.settings.timeInput}
+            />
           </div>
 
           <div className="sm:max-w-xs">
@@ -704,7 +774,10 @@ export function SettingsForm({
         titleId="unsaved-title"
         title={t.settings.unsavedTitle}
         closeLabel={t.common.close}
-        onClose={() => setPendingTab(null)}
+        onClose={() => {
+          setPendingTab(null);
+          setPendingLeave(null);
+        }}
         className="max-w-md"
       >
         <p className="text-sm leading-relaxed text-ink-muted">

@@ -8,6 +8,7 @@ covers and where a new one belongs:
 | `src/lib/auth.ts` | `tests/lib/auth.test.ts` |
 | `src/lib/i18n/text.ts` | `tests/lib/i18n/text.test.ts` |
 | `convex/rsvps.ts` | `tests/convex/rsvps.test.ts` |
+| `src/app/rsvp/actions.ts` | `tests/app/rsvp-actions.test.ts` |
 
 ```bash
 pnpm test        # once
@@ -32,6 +33,16 @@ the family reads the wrong language.
   and a date does not slip a day.
 - **`convex/rsvps`** — the email and phone keys that decide whether a second
   submission updates a guest or duplicates them.
+- **`app/rsvp/actions`** — that `submitRsvp` refuses a caller with no session,
+  a forged or expired one, or an admin token in the guest cookie. Middleware
+  does not run for Server Actions, so `/rsvp` being gated proves nothing here.
+- **`app/actions` (guest sign-in)** — that an unreadable settings row fails
+  closed instead of falling back to `SITE_PASSWORD`, that the fallback still
+  works when nothing is stored, and that `next` cannot send a guest off-site.
+- **`lib/nav`** — the redirect allowlist, including protocol-relative and
+  control-character attempts.
+- **`lib/date-parts`** — that an impossible day like `2026-02-31` is rejected
+  rather than stored and displayed as March 3rd.
 
 ## Two things worth knowing
 
@@ -42,14 +53,16 @@ deliberately west of UTC. `formatDateShort` guards against a bare
 
 **A passing suite proves nothing by itself.** These tests were checked by
 breaking the code on purpose — dropping the role check, reverting the locale
-parser to first-tag-wins, summing merged parties instead of taking the max —
-and confirming each one turns the suite red. If you add a test, try breaking
-what it covers and make sure it fails. One test here originally passed for the
-wrong reason and only that exercise caught it.
+parser to first-tag-wins, summing merged parties instead of taking the max,
+removing the Server Action session check, letting an outage fall back to
+`SITE_PASSWORD` — and confirming each one turns the suite red. If you add a
+test, try breaking what it covers and make sure it fails. One test here
+originally passed for the wrong reason and only that exercise caught it.
 
 ## What is not covered
 
-No component or browser tests. The UI was verified by hand against a running
-server, and the pieces most likely to break silently are the pure functions
-above. Adding React Testing Library later would be reasonable; it is not
-pretending to be here now.
+No component or browser tests — so the unsaved-changes navigation guard and
+the date/time field labelling are verified by hand, not here. The UI was
+verified against a running server, and the pieces most likely to break
+silently are the pure functions above. Adding React Testing Library later
+would be reasonable; it is not pretending to be here now.

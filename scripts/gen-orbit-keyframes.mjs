@@ -1,7 +1,7 @@
 const [P1X,P1Y,P2X,P2Y] = [0.35, 0.25, 0.6, 1];
 const bez = (t,a,b) => 3*(1-t)**2*t*a + 3*(1-t)*t*t*b + t**3;
 const solve = (u) => { let lo=0, hi=1;
-  for (let i=0;i<60;i++){ const m=(lo+hi)/2; (bez(m,P1X,P2X) < u ? lo=m : hi=m); } return (lo+hi)/2; };
+  for (let i=0;i<60;i++){ const m=(lo+hi)/2; if (bez(m,P1X,P2X) < u) lo=m; else hi=m; } return (lo+hi)/2; };
 const ease = (u) => bez(solve(u), P1Y, P2Y);
 
 // Depth as a function of PATH POSITION p, not time.

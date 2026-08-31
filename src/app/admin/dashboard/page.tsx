@@ -19,12 +19,21 @@ import type { Dictionary } from "@/lib/i18n";
 // RSVPs change while the page is open; never serve this from a cache.
 export const dynamic = "force-dynamic";
 
+/**
+ * How many replies the table shows. The CSV export carries all of them, so a
+ * shower large enough to pass this still has a complete list one click away.
+ */
+const TABLE_ROWS = 200;
+
 function loadStats() {
   return convexClient().query(api.rsvps.stats, { key: convexKey() });
 }
 
-function loadList() {
-  return convexClient().query(api.rsvps.list, { key: convexKey() });
+function loadPage() {
+  return convexClient().query(api.rsvps.page, {
+    key: convexKey(),
+    paginationOpts: { numItems: TABLE_ROWS, cursor: null },
+  });
 }
 
 /** Shown when Convex isn't wired up yet, instead of a bare 500. */
@@ -71,15 +80,27 @@ export default async function DashboardPage() {
   const { locale, t } = await getTranslation();
 
   let stats: Awaited<ReturnType<typeof loadStats>>;
-  let rsvps: Awaited<ReturnType<typeof loadList>>;
+  let replies: Awaited<ReturnType<typeof loadPage>>;
   let settings: Awaited<ReturnType<typeof getSettings>>;
 
   try {
-    [stats, rsvps, settings] = await Promise.all([loadStats(), loadList(), getSettings()]);
+    [stats, replies, settings] = await Promise.all([loadStats(), loadPage(), getSettings()]);
+
+    /*
+     * The totals are a stored row kept in step with every write, rather than a
+     * scan of the whole table. `ready` is false only before that row has ever
+     * existed — a deployment that predates it, or one restored from a backup —
+     * so this counts once and then never runs again.
+     */
+    if (!stats.ready) {
+      await convexClient().mutation(api.rsvps.rebuildTotals, { key: convexKey() });
+      stats = await loadStats();
+    }
   } catch (error) {
     return <SetupNeeded detail={error instanceof Error ? error.message : String(error)} t={t} />;
   }
 
+  const rsvps = replies.page;
   const meals = Object.entries(stats.mealCounts).sort((a, b) => b[1] - a[1]);
 
   /*
@@ -160,11 +181,19 @@ export default async function DashboardPage() {
           </Card>
         ) : null}
 
+        {replies.isDone ? null : (
+          <p className="mt-6 text-sm text-ink-muted">
+            {fill(t.admin.showingRecent, {
+              count: rsvps.length,
+              total: stats.responses,
+            })}
+          </p>
+        )}
+
         <section className="mt-6">
           <RsvpTable
             rsvps={rows}
             t={t}
-            askMeal={settings.askMeal}
             mealOptions={settings.mealOptions.map((option) => pick(option, locale))}
           />
         </section>

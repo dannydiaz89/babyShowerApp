@@ -7,6 +7,7 @@ import { ArrivalLap } from "@/components/ArrivalLap";
 import { Card, DisplayTitle } from "@/components/ui";
 import { GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { getTranslation, contactLine, pickOptional } from "@/lib/i18n";
+import { safeNext } from "@/lib/nav";
 import { getSettings } from "@/lib/settings";
 
 export default async function GatePage({
@@ -14,11 +15,13 @@ export default async function GatePage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
-  const { next } = await searchParams;
+  // `next` comes straight off the query string, and redirect() will happily
+  // send someone to another origin — so it is filtered before either use.
+  const next = safeNext((await searchParams).next);
 
   // Someone who already has the password shouldn't see the gate again.
   if (await verifyToken((await cookies()).get(GUEST_COOKIE)?.value, "guest")) {
-    redirect(next ?? "/invitation");
+    redirect(next);
   }
 
   const [{ locale, t }, settings] = await Promise.all([getTranslation(), getSettings()]);

@@ -12,17 +12,12 @@ import {
   type Role,
 } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
+import { safeNext } from "@/lib/nav";
 import { verifyPassword } from "@/lib/password";
 import { getSettings } from "@/lib/settings";
 import { LOCALE_COOKIE, getTranslation, fill, isLocale } from "@/lib/i18n";
 
 export type LoginState = { error?: string };
-
-/** Only allow redirects back into this site. */
-function safeNext(value: FormDataEntryValue | null): string {
-  const next = typeof value === "string" ? value : "";
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/invitation";
-}
 
 /**
  * Who is knocking. Behind Vercel this is the real client address; locally it
@@ -40,7 +35,12 @@ type LimitCheck = { blocked: boolean; retryAfterMs: number; unavailable?: boolea
 
 async function checkLimit(role: Role, id: string): Promise<LimitCheck> {
   try {
-    return await convexClient().query(api.rateLimit.check, { key: convexKey(), id });
+    // A mutation, not a query: a lockout expires with the passage of time, and
+    // a query result does not. See the comment on rateLimit.check.
+    return await convexClient().mutation(api.rateLimit.check, {
+      key: convexKey(),
+      id,
+    });
   } catch (error) {
     console.error("Rate limit check failed", error);
     // Admin fails closed: without a working limiter, that password is the only
@@ -78,13 +78,26 @@ function lockoutMessage(template: string, retryAfterMs: number): string {
   return fill(template, { minutes: Math.max(1, Math.ceil(retryAfterMs / 60_000)) });
 }
 
-/** The guest password set in the admin page, or the environment fallback. */
-async function guestPasswordMatches(submitted: string): Promise<boolean> {
+/**
+ * Check the guest password: the one set in the admin page, or the environment
+ * fallback when the hosts have never set one.
+ *
+ * Fails closed when the settings cannot be read. Falling back to
+ * SITE_PASSWORD in that case would mean a Convex outage silently reinstates a
+ * password the hosts have already rotated away from — and the 30-day session
+ * it issues keeps working long after the outage ends.
+ */
+type PasswordCheck = "ok" | "wrong" | "unavailable";
+
+async function checkGuestPassword(submitted: string): Promise<PasswordCheck> {
   const settings = await getSettings();
-  if (settings.guestPasswordHash) {
-    return verifyPassword(submitted.trim(), settings.guestPasswordHash);
-  }
-  return passwordMatches(submitted, process.env.SITE_PASSWORD);
+  if (!settings.available) return "unavailable";
+
+  const matches = settings.guestPasswordHash
+    ? await verifyPassword(submitted.trim(), settings.guestPasswordHash)
+    : await passwordMatches(submitted, process.env.SITE_PASSWORD);
+
+  return matches ? "ok" : "wrong";
 }
 
 export async function guestLogin(
@@ -101,7 +114,12 @@ export async function guestLogin(
     return { error: lockoutMessage(t.gate.lockedOut, limit.retryAfterMs) };
   }
 
-  if (!(await guestPasswordMatches(password))) {
+  const check = await checkGuestPassword(password);
+
+  // Not the guest's mistake, so it costs them nothing against the limiter.
+  if (check === "unavailable") return { error: t.gate.unavailable };
+
+  if (check === "wrong") {
     const result = await recordFailure("guest", id);
     return {
       error: result.blocked

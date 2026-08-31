@@ -95,6 +95,29 @@ export default defineSchema({
   }).index("by_singleton", ["singleton"]),
 
   /**
+   * Running totals over `rsvps`, kept in step with every write to that table
+   * inside the same transaction. The dashboard needs counts and sums, and
+   * Convex has no count operator: reading the whole table to add it up is
+   * fine at ten replies and hits the read limit at ten thousand.
+   *
+   * Absent until `rebuildTotals` has run once. That absence is meaningful —
+   * see `adjustTotals` in rsvps.ts.
+   */
+  rsvpTotals: defineTable({
+    singleton: v.literal("totals"),
+
+    responses: v.number(),
+    attendingParties: v.number(),
+    adults: v.number(),
+    kids: v.number(),
+    withDietaryNotes: v.number(),
+
+    // Meal name -> how many adults chose it. A meal drops out of the record
+    // once nobody has it, so this cannot grow past the options on offer.
+    mealCounts: v.record(v.string(), v.number()),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
    * Failed sign-in counter, so shared passwords can't be brute-forced.
    * Keyed on role + client IP.
    */

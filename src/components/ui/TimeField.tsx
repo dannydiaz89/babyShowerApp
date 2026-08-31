@@ -133,6 +133,7 @@ export function TimeField({
   onChange,
   locale,
   labels,
+  ariaLabel,
 }: {
   id: string;
   name: string;
@@ -140,6 +141,11 @@ export function TimeField({
   onChange: (next: string) => void;
   locale: string;
   labels: TimeFieldLabels;
+  /**
+   * Names the input when no <label> points at it. The clock button's own
+   * label names the button, not the text field beside it.
+   */
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(() => formatValue(value, locale));
@@ -176,6 +182,7 @@ export function TimeField({
             const parsed = parseTyped(text);
             setText(parsed ? formatValue(parsed, locale) : "");
           }}
+          aria-label={ariaLabel}
           aria-invalid={typedIsBroken || undefined}
           autoComplete="off"
           className="pr-11"

@@ -6,14 +6,18 @@ import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
 import { hashPassword } from "@/lib/password";
-import { getSettings } from "@/lib/settings";
 import { getTranslation } from "@/lib/i18n";
 import {
   SETTINGS_TABS,
   type SettingsState,
   type SettingsTab,
 } from "@/lib/settings-tabs";
-import { REGISTRY_ACCENTS, type Localized, type Settings } from "@/lib/defaults";
+import {
+  DEFAULT_SETTINGS,
+  REGISTRY_ACCENTS,
+  type Localized,
+  type Settings,
+} from "@/lib/defaults";
 
 
 /** Server Actions aren't covered by middleware, so re-check the admin cookie. */
@@ -124,19 +128,21 @@ export async function saveSettings(
     const client = convexClient();
     const key = convexKey();
 
-    // Read-modify-write: the mutation replaces the whole row, so merge this
-    // tab's fields onto everything currently stored. Without this, saving one
-    // tab would blank out the others.
-    const current = await getSettings();
-    const { guestPasswordHash, isConfigured, ...stored } = current;
-    void guestPasswordHash;
-    void isConfigured;
-
+    /*
+     * Only this tab's own fields are sent, and Convex merges them into the
+     * stored row inside one transaction. Reading the whole row here and
+     * writing it all back would mean two hosts — or two browser tabs — saving
+     * different sections from the same page load, with the later save
+     * restoring the snapshot the earlier one had already replaced.
+     *
+     * DEFAULT_SETTINGS is only used when no row exists yet: a first save has
+     * to produce a complete document, and the defaults live on this side.
+     */
     if (tab !== "access") {
       await client.mutation(api.settings.update, {
         key,
-        ...stored,
-        ...fieldsForTab(tab, formData),
+        fields: fieldsForTab(tab, formData),
+        defaults: DEFAULT_SETTINGS,
       });
     }
 
@@ -156,10 +162,13 @@ export async function saveSettings(
           passwordOk: false,
         };
       }
-      // Creating the row first means a first-run save can set a password too.
-      if (!isConfigured) {
-        await client.mutation(api.settings.update, { key, ...stored });
-      }
+      // setGuestPasswordHash needs a row to patch, and an empty field set
+      // creates one from the defaults if this is the hosts' very first save.
+      await client.mutation(api.settings.update, {
+        key,
+        fields: {},
+        defaults: DEFAULT_SETTINGS,
+      });
       await client.mutation(api.settings.setGuestPasswordHash, {
         key,
         hash: await hashPassword(newPassword),

@@ -1,11 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import schema from "./schema";
 import { assertServer } from "./guard";
 
 const localized = v.object({ en: v.string(), es: v.string() });
 
 /** Everything the admin config form can write. */
-export const editableFields = {
+export const editable = v.object({
   babyName: v.string(),
   honorees: v.string(),
   venueName: v.string(),
@@ -32,11 +33,12 @@ export const editableFields = {
   askMeal: v.boolean(),
   allowKids: v.boolean(),
   collectPhone: v.boolean(),
-};
+});
 
 /** The one settings row, or null if the hosts have never saved. */
 export const get = query({
   args: { key: v.string() },
+  returns: v.union(schema.doc("settings"), v.null()),
   handler: async (ctx, { key }) => {
     assertServer(key);
     return ctx.db
@@ -46,9 +48,22 @@ export const get = query({
   },
 });
 
+/**
+ * Save one section of the settings.
+ *
+ * Only the fields in `fields` are written, and they are read-modify-written
+ * inside this transaction rather than by the caller. Two hosts saving
+ * different tabs from the same page load therefore each change only their own
+ * section, instead of the second save restoring the snapshot the first one
+ * replaced.
+ *
+ * `defaults` is used only when no row exists yet: a first save has to produce
+ * a complete document, and the built-in defaults live in the Next.js app.
+ */
 export const update = mutation({
-  args: { ...editableFields, key: v.string() },
-  handler: async (ctx, { key, ...fields }) => {
+  args: { key: v.string(), fields: editable.partial(), defaults: editable },
+  returns: v.null(),
+  handler: async (ctx, { key, fields, defaults }) => {
     assertServer(key);
 
     const existing = await ctx.db
@@ -58,14 +73,16 @@ export const update = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { ...fields, updatedAt: Date.now() });
-      return;
+      return null;
     }
 
     await ctx.db.insert("settings", {
+      ...defaults,
       ...fields,
       singleton: "settings" as const,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });
 
@@ -75,6 +92,7 @@ export const update = mutation({
  */
 export const setGuestPasswordHash = mutation({
   args: { key: v.string(), hash: v.union(v.string(), v.null()) },
+  returns: v.null(),
   handler: async (ctx, { key, hash }) => {
     assertServer(key);
 
@@ -91,5 +109,6 @@ export const setGuestPasswordHash = mutation({
       guestPasswordHash: hash ?? undefined,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });

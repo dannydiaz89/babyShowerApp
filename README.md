@@ -187,7 +187,15 @@ Known limits, stated plainly:
 - Rate limiting is per IP address. It stops scripted guessing; it does not stop
   a determined attacker with many addresses. A strong admin password does.
 - Anyone with the admin password can export the entire guest list as a CSV.
-  Treat that file the way you'd treat the list itself.
+  Treat that file the way you'd treat the list itself. Guest-written cells that
+  start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet reads them as
+  text rather than running them as a formula.
+- Server Actions are their own public endpoints — middleware does not run for
+  them — so each one checks the session itself rather than relying on the page
+  it belongs to being gated.
+- If the settings cannot be read, guest sign-in fails closed rather than
+  falling back to `SITE_PASSWORD`. An outage must not reinstate a password the
+  hosts have already rotated away from.
 
 ## Design system
 
@@ -245,11 +253,28 @@ RSVPs are keyed on email address. A guest who submits twice with the same
 address updates their answer instead of being counted twice. You can also
 delete any row from the dashboard.
 
-## Tests
+### How the dashboard counts
+
+The headline numbers come from a single `rsvpTotals` row that every write to
+`rsvps` updates in the same transaction, rather than from reading the table and
+adding it up — Convex has no count operator, and a whole-table read stops
+working once the table is large enough. The RSVP list itself is paginated; the
+CSV export walks every page.
+
+An existing deployment, or one restored from a backup, has no totals row yet.
+The first dashboard visit builds it once (`rsvps.rebuildTotals`) and it stays
+current from then on.
+
+## Checks
 
 ```bash
+pnpm lint        # ESLint, configured in eslint.config.mjs
+pnpm typecheck
 pnpm test
+pnpm check:contrast
 ```
+
+### Tests
 
 Vitest, no browser. `tests/` mirrors the source tree, so a test's path says
 what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. See
@@ -260,8 +285,9 @@ opening the admin dashboard, a guest counted twice, an allergy note lost in a
 merge, or half the family reading the wrong language. Every one of them was
 checked by deliberately breaking the code and confirming the suite goes red.
 
-CI runs types, tests, the WCAG contrast check and a production build on every
-push and pull request — see [.github/workflows/ci.yml](.github/workflows/ci.yml).
+CI runs lint, types, tests, the WCAG contrast check and a production build on
+every push and pull request — see
+[.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Using this for your own shower
 

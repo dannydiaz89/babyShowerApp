@@ -18,6 +18,8 @@ export const en = {
     lockedOut: "Too many attempts. Please try again in {minutes} minutes.",
     limiterUnavailable:
       "Sign-in is temporarily unavailable because the database can't be reached. Admin sign-in stays closed until it is back.",
+    unavailable:
+      "We can't check the password right now because the database can't be reached. Please try again in a few minutes.",
     lostPassword: "Lost the password? Text {name} or email {email}.",
     lostPasswordNameOnly: "Lost the password? Text {name}.",
     lostPasswordEmailOnly: "Lost the password? Email {email}.",
@@ -95,6 +97,8 @@ export const en = {
     errEmailInvalid: "That doesn't look like an email address.",
     errAdults: "There should be at least one adult in your party.",
     errSaving: "Something went wrong saving your RSVP. Please try again in a moment.",
+    errSignedOut:
+      "Your session has expired. Please enter the password from your invitation again, then resend this form.",
 
     successAttending: "Wonderful — you're on the list.",
     successDeclined: "Thank you for letting us know.",
@@ -145,6 +149,8 @@ export const en = {
     viewSite: "View site",
     settings: "Settings",
     noRsvps: "No RSVPs yet. They'll appear here as guests respond.",
+    showingRecent:
+      "Showing the {count} most recent replies of {total}. The CSV has every one.",
 
     colGuest: "Guest",
     colReply: "Reply",
@@ -259,6 +265,8 @@ export const en = {
     hoursColumn: "Hour",
     minutesColumn: "Minute",
     meridiemColumn: "AM or PM",
+    dateInput: "Date",
+    timeInput: "Time",
     contactName: "Contact name",
     contactEmail: "Contact email",
     giftShipping: "Gift shipping address",
@@ -323,6 +331,8 @@ export const es: Dictionary = {
     lockedOut: "Demasiados intentos. Inténtenlo de nuevo en {minutes} minutos.",
     limiterUnavailable:
       "El inicio de sesión no está disponible porque no se puede conectar con la base de datos. El acceso de anfitrión permanece cerrado hasta que vuelva.",
+    unavailable:
+      "No podemos verificar la contraseña en este momento porque no se puede conectar con la base de datos. Inténtenlo de nuevo en unos minutos.",
     lostPassword: "¿Perdieron la contraseña? Escriban a {name} o al correo {email}.",
     lostPasswordNameOnly: "¿Perdieron la contraseña? Escriban a {name}.",
     lostPasswordEmailOnly: "¿Perdieron la contraseña? Escriban al correo {email}.",
@@ -400,6 +410,8 @@ export const es: Dictionary = {
     errEmailInvalid: "Eso no parece un correo electrónico.",
     errAdults: "Debe haber al menos un adulto en su grupo.",
     errSaving: "Algo salió mal al guardar su confirmación. Inténtenlo de nuevo en un momento.",
+    errSignedOut:
+      "Su sesión expiró. Vuelvan a escribir la contraseña de su invitación y envíen este formulario otra vez.",
 
     successAttending: "¡Qué gusto! Ya están en la lista.",
     successDeclined: "Gracias por avisarnos.",
@@ -450,6 +462,8 @@ export const es: Dictionary = {
     viewSite: "Ver el sitio",
     settings: "Configuración",
     noRsvps: "Aún no hay confirmaciones. Aparecerán aquí conforme respondan.",
+    showingRecent:
+      "Mostrando las {count} respuestas más recientes de {total}. El CSV las incluye todas.",
 
     colGuest: "Invitado",
     colReply: "Respuesta",
@@ -562,6 +576,8 @@ export const es: Dictionary = {
     hoursColumn: "Hora",
     minutesColumn: "Minutos",
     meridiemColumn: "AM o PM",
+    dateInput: "Fecha",
+    timeInput: "Hora",
     contactName: "Nombre de contacto",
     contactEmail: "Correo de contacto",
     giftShipping: "Dirección para enviar regalos",

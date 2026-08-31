@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { adminLogin } from "../actions";
@@ -37,9 +38,9 @@ export default async function AdminLoginPage() {
 
       <div className="mt-6 flex flex-col items-center gap-4">
         <LanguageToggle locale={locale} currentPath="/admin" />
-        <a href="/" className="text-xs text-ink-muted transition-colors hover:text-ink">
+        <Link href="/" className="text-xs text-ink-muted transition-colors hover:text-ink">
           {t.admin.backToInvitation}
-        </a>
+        </Link>
       </div>
     </main>
   );

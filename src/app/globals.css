@@ -59,6 +59,17 @@
 
   --color-on-accent: #ffffff;
 
+  /* --- Registry accents. The swatch a host picks per registry card: a soft
+         ground and an ink that reads on it. Named here, like everything else,
+         so a theme change moves them and the contrast check sees them. The
+         "sage" option reuses accent-soft/accent and needs no pair of its own.
+         ---------------------------------------------------------------- */
+  --color-registry-clay: #f5e4db;
+  --color-registry-clay-ink: #9c5130;
+  --color-registry-amber: #f7edd6;
+  --color-registry-sky: #e2eef2;
+  --color-registry-sky-ink: #2c5867;
+
   /* --- Radius. Deliberately no fully-rounded step: this design uses soft
          rectangles, not pills. ---------------------------------------------- */
   --radius-xs: 0.25rem;

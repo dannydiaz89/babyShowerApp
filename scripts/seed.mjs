@@ -161,7 +161,22 @@ const client = new ConvexHttpClient(env.CONVEX_URL);
 const key = env.ADMIN_API_KEY;
 const clearing = process.argv.includes("--clear");
 
-const existing = await client.query("rsvps:list", { key });
+/** Every stored RSVP, a page at a time — the query is paginated. */
+async function readAll() {
+  const rows = [];
+  let cursor = null;
+  for (;;) {
+    const page = await client.query("rsvps:page", {
+      key,
+      paginationOpts: { numItems: 500, cursor },
+    });
+    rows.push(...page.page);
+    if (page.isDone) return rows;
+    cursor = page.continueCursor;
+  }
+}
+
+const existing = await readAll();
 const samples = existing.filter(isSample);
 const real = existing.length - samples.length;
 
