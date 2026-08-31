@@ -170,8 +170,13 @@ What's in place:
   CDN, proxy, or search index.
 - **`Referrer-Policy: no-referrer`.** Without it, every guest clicking through
   to Amazon or Target would hand them your invitation URL.
-- **CSP with `frame-ancestors 'none'`**, `X-Frame-Options`, `nosniff`, HSTS, and
-  a Permissions-Policy that turns off camera, microphone, and geolocation.
+- **A nonce-based CSP.** Every response carries a fresh nonce and Next.js
+  stamps it on the scripts it inlines, so `script-src` names that one script
+  and refuses any other — an injected `<script>` does not run. Alongside it:
+  `frame-ancestors 'none'`, `X-Frame-Options`, `nosniff`, HSTS, a
+  `Cross-Origin-Opener-Policy` that severs `window.opener` on the registry
+  links, and a Permissions-Policy that turns off camera, microphone, and
+  geolocation.
 - **The guest password is hashed** (PBKDF2-SHA256, 210k iterations) when set
   from the Settings page, so the database never holds the password itself.
 - **RSVP submissions are throttled** to 12 per address per hour, so nobody with

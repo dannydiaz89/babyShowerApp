@@ -2,41 +2,26 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
 
-/**
- * Next.js inlines a little bootstrap script, so 'unsafe-inline' is required
- * for scripts; React Refresh additionally needs 'unsafe-eval' in development.
- * Fonts are self-hosted by next/font, so nothing needs an external origin.
- */
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-  "frame-ancestors 'none'",
-  /*
-   * Production only. This directive rewrites every http:// request as https://,
-   * which is right once the site is on Vercel — but in development it breaks
-   * access from another device on the network: the phone asks for
-   * http://192.168.x.x:3001, the directive upgrades it, the dev server speaks
-   * no TLS, and you get ERR_SSL_PROTOCOL_ERROR or a page with no stylesheet.
-   * localhost is exempt from the upgrade, which is why it only shows on a phone.
-   */
-  ...(isDev ? [] : ["upgrade-insecure-requests"]),
-].join("; ");
-
 const baseHeaders = [
-  { key: "Content-Security-Policy", value: csp },
+  /*
+   * Content-Security-Policy is deliberately absent here and set per request in
+   * src/middleware.ts instead. It carries a nonce, and a header declared in
+   * this file is identical on every response — which would make the nonce
+   * worthless. See src/lib/csp.ts.
+   */
   // Clickjacking: nobody frames this site and harvests clicks on it.
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   // The registry links point off-site. Without this, Amazon and Target would
   // receive the invitation URL in the Referer header.
   { key: "Referrer-Policy", value: "no-referrer" },
+  /*
+   * Puts the site in its own browsing-context group: a page that opens this one
+   * cannot reach into it through window.opener, and the registry and map links
+   * that open in a new tab get their opener severed on the way out. Nothing
+   * here ever reads back from a window it opened, so this costs nothing.
+   */
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
