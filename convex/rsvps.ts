@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import schema from "./schema";
 import { assertServer } from "./guard";
+import { MEAL_TALLY_READ_LIMIT } from "./limits";
 
 const rsvpFields = {
   name: v.string(),
@@ -43,23 +44,20 @@ export function toPhoneKey(phone: string | undefined): string | undefined {
  * cannot drift. Reading the whole table to add these up instead would be an
  * unbounded read that eventually exceeds Convex's per-query limits — and the
  * per-IP submission limiter caps the rate, not the total.
+ *
+ * Meal tallies are deliberately not part of this. Anything stored here is
+ * rewritten by every RSVP write, so it has to stay a fixed size for ever; the
+ * meals live one to a document in `mealTallies`.
  */
-export type MealCount = { meal: string; count: number };
-
 export type Totals = {
   responses: number;
   attendingParties: number;
   adults: number;
   kids: number;
   withDietaryNotes: number;
-  /*
-   * An array, not a record keyed by meal name. Convex record keys must be
-   * ASCII and the hosts write these labels themselves, so a menu with "Niños"
-   * or "Entrée" on it would make every RSVP choosing that option fail to
-   * save — and, before the totals exist, would fail the first rebuild instead.
-   */
-  mealCounts: MealCount[];
 };
+
+export type MealCount = { meal: string; count: number };
 
 const ZERO_TOTALS: Totals = {
   responses: 0,
@@ -67,12 +65,7 @@ const ZERO_TOTALS: Totals = {
   adults: 0,
   kids: 0,
   withDietaryNotes: 0,
-  mealCounts: [],
 };
-
-const mealCountsValidator = v.array(
-  v.object({ meal: v.string(), count: v.number() })
-);
 
 const totalsValidator = v.object({
   responses: v.number(),
@@ -80,47 +73,17 @@ const totalsValidator = v.object({
   adults: v.number(),
   kids: v.number(),
   withDietaryNotes: v.number(),
-  mealCounts: mealCountsValidator,
 });
+
+const mealCountsValidator = v.array(
+  v.object({ meal: v.string(), count: v.number() })
+);
 
 /** Just the fields that move the totals. */
 type Counted = Pick<
   Doc<"rsvps">,
   "attending" | "adults" | "kids" | "meal" | "dietaryNotes"
 >;
-
-/*
- * The tally lives in one shared document, and every RSVP write patches it. If
- * it can grow without limit it eventually passes Convex's document size and
- * array length caps, and from that point on *every* RSVP write rolls back —
- * one guest's input taking the whole form down.
- *
- * The RSVP action already refuses a meal that is not on the menu. These are
- * the structural limits underneath that: whatever any caller sends, this
- * aggregate stays small. Far above any real menu, so they only bite under
- * abuse — at which point an undercounted tally is a much better failure than
- * a form nobody can submit, and `rebuildTotals` puts it right.
- */
-export const MAX_TRACKED_MEALS = 64;
-export const MAX_MEAL_LABEL = 120;
-
-/** Move one meal's tally by `delta`, adding or dropping the entry as needed. */
-function withMeal(counts: MealCount[], meal: string, delta: number): MealCount[] {
-  const known = counts.some((entry) => entry.meal === meal);
-
-  if (!known) {
-    // Taking back a meal that was never tracked is simply nothing to do.
-    if (delta <= 0) return counts;
-    if (meal.length > MAX_MEAL_LABEL) return counts;
-    if (counts.length >= MAX_TRACKED_MEALS) return counts;
-    return [...counts, { meal, count: delta }];
-  }
-
-  return counts
-    .map((entry) => (entry.meal === meal ? { meal, count: entry.count + delta } : entry))
-    // Drop a meal nobody has left, so this stays as short as the menu.
-    .filter((entry) => entry.count > 0);
-}
 
 /** Add (`sign` 1) or take back (`sign` -1) one row's contribution. */
 export function applyRow(totals: Totals, row: Counted, sign: 1 | -1): Totals {
@@ -134,16 +97,41 @@ export function applyRow(totals: Totals, row: Counted, sign: 1 | -1): Totals {
   next.kids += sign * row.kids;
   if (row.dietaryNotes?.trim()) next.withDietaryNotes += sign;
 
-  const meal = row.meal?.trim();
-  // A party's meal choice covers its adults; kids are counted separately.
-  if (meal) next.mealCounts = withMeal(next.mealCounts, meal, sign * row.adults);
-
   return next;
 }
 
 /** Starting totals, for a rebuild or a test. */
 export function zeroTotals(): Totals {
-  return { ...ZERO_TOTALS, mealCounts: [] };
+  return { ...ZERO_TOTALS };
+}
+
+/**
+ * What one row moves a meal's tally by, if anything.
+ *
+ * A party's meal choice covers its adults; kids are counted separately. A
+ * reply that is not coming has no meal to count.
+ */
+export function mealDelta(
+  row: Counted,
+  sign: 1 | -1
+): { meal: string; delta: number } | null {
+  if (!row.attending) return null;
+
+  const meal = row.meal?.trim();
+  if (!meal) return null;
+
+  return { meal, delta: sign * row.adults };
+}
+
+/** Sum the meal movements of a set of row changes, so each meal is written once. */
+export function mealDeltas(changes: { row: Counted; sign: 1 | -1 }[]): Map<string, number> {
+  const deltas = new Map<string, number>();
+  for (const change of changes) {
+    const moved = mealDelta(change.row, change.sign);
+    if (!moved) continue;
+    deltas.set(moved.meal, (deltas.get(moved.meal) ?? 0) + moved.delta);
+  }
+  return deltas;
 }
 
 async function totalsRow(ctx: MutationCtx) {
@@ -151,6 +139,37 @@ async function totalsRow(ctx: MutationCtx) {
     .query("rsvpTotals")
     .withIndex("by_singleton", (q) => q.eq("singleton", "totals"))
     .unique();
+}
+
+/**
+ * Move one meal's tally, creating or removing its document as needed.
+ *
+ * No cap, and none needed: a meal is its own row, so the tally cannot grow
+ * into a document limit and cannot turn a meal away. That is the whole reason
+ * these are not a list on the totals row.
+ */
+async function adjustMealTally(
+  ctx: MutationCtx,
+  meal: string,
+  delta: number
+): Promise<void> {
+  if (delta === 0) return;
+
+  const row = await ctx.db
+    .query("mealTallies")
+    .withIndex("by_meal", (q) => q.eq("meal", meal))
+    .unique();
+
+  if (!row) {
+    // Taking back a meal that was never counted is nothing to do.
+    if (delta > 0) await ctx.db.insert("mealTallies", { meal, count: delta });
+    return;
+  }
+
+  const count = row.count + delta;
+  // Drop a meal nobody has left, rather than keeping a row that reads zero.
+  if (count > 0) await ctx.db.patch(row._id, { count });
+  else await ctx.db.delete(row._id);
 }
 
 /**
@@ -173,11 +192,13 @@ async function adjustTotals(
     adults: existing.adults,
     kids: existing.kids,
     withDietaryNotes: existing.withDietaryNotes,
-    mealCounts: existing.mealCounts,
   };
   for (const change of changes) totals = applyRow(totals, change.row, change.sign);
-
   await ctx.db.patch(existing._id, totals);
+
+  for (const [meal, delta] of mealDeltas(changes)) {
+    await adjustMealTally(ctx, meal, delta);
+  }
 }
 
 /* ---------------------------------------------------------------- writing */
@@ -325,6 +346,8 @@ export const stats = query({
     totalGuests: v.number(),
     withDietaryNotes: v.number(),
     mealCounts: mealCountsValidator,
+    /** True when there are more meals than one read returns. */
+    mealCountsPartial: v.boolean(),
   }),
   handler: async (ctx, { key }) => {
     assertServer(key);
@@ -336,6 +359,11 @@ export const stats = query({
 
     const totals: Totals = row ?? ZERO_TOTALS;
 
+    // One more than the limit, so a partial list can be reported rather than
+    // quietly showing fewer meals than the hosts have to cook.
+    const tallies = await ctx.db.query("mealTallies").take(MEAL_TALLY_READ_LIMIT + 1);
+    const partial = tallies.length > MEAL_TALLY_READ_LIMIT;
+
     return {
       ready: row !== null,
       responses: totals.responses,
@@ -345,7 +373,10 @@ export const stats = query({
       kids: totals.kids,
       totalGuests: totals.adults + totals.kids,
       withDietaryNotes: totals.withDietaryNotes,
-      mealCounts: totals.mealCounts,
+      mealCounts: tallies
+        .slice(0, MEAL_TALLY_READ_LIMIT)
+        .map(({ meal, count }) => ({ meal, count })),
+      mealCountsPartial: partial,
     };
   },
 });
@@ -363,7 +394,7 @@ const REBUILD_LIMIT = 4096;
 
 export const rebuildTotals = mutation({
   args: { key: v.string() },
-  returns: totalsValidator,
+  returns: v.object({ ...totalsValidator.fields, mealCounts: mealCountsValidator }),
   handler: async (ctx, { key }) => {
     assertServer(key);
 
@@ -382,7 +413,22 @@ export const rebuildTotals = mutation({
     if (existing) await ctx.db.patch(existing._id, totals);
     else await ctx.db.insert("rsvpTotals", { singleton: "totals" as const, ...totals });
 
-    return totals;
+    /*
+     * Meal tallies are replaced rather than adjusted: a rebuild exists to
+     * discard whatever was there, including a label no reply carries any more.
+     */
+    const stale = await ctx.db.query("mealTallies").take(MEAL_TALLY_READ_LIMIT + 1);
+    for (const row of stale) await ctx.db.delete(row._id);
+
+    const counts = mealDeltas(rows.map((row) => ({ row, sign: 1 as const })));
+    const mealCounts: MealCount[] = [];
+    for (const [meal, count] of counts) {
+      if (count <= 0) continue;
+      await ctx.db.insert("mealTallies", { meal, count });
+      mealCounts.push({ meal, count });
+    }
+
+    return { ...totals, mealCounts };
   },
 });
 

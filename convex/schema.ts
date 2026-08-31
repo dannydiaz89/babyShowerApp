@@ -112,15 +112,26 @@ export default defineSchema({
     kids: v.number(),
     withDietaryNotes: v.number(),
 
-    /*
-     * How many adults chose each meal. An array rather than a record keyed by
-     * meal name: Convex record keys must be ASCII, and the hosts write these
-     * labels themselves — "Niños" or "Entrée" would make every RSVP that
-     * selected them fail to save. An entry drops out once nobody has that
-     * meal, so this cannot grow past the options on offer.
-     */
-    mealCounts: v.array(v.object({ meal: v.string(), count: v.number() })),
   }).index("by_singleton", ["singleton"]),
+
+  /**
+   * How many adults chose each meal — one document per meal.
+   *
+   * Not a field on the totals row. Every RSVP write patches that row, so
+   * anything stored there has to stay small for ever; a list of meals that
+   * grows would eventually pass the document size limit and take every RSVP
+   * down with it. Capping the list instead only moved the failure: a meal past
+   * the cap was silently missing from the catering numbers the hosts order
+   * food against.
+   *
+   * A document each has neither problem. One meal's count is one small row, a
+   * write touches only the meals that changed, and a row is deleted once
+   * nobody has that meal left.
+   */
+  mealTallies: defineTable({
+    meal: v.string(),
+    count: v.number(),
+  }).index("by_meal", ["meal"]),
 
   /**
    * Failed sign-in counter, so shared passwords can't be brute-forced.

@@ -35,6 +35,7 @@ import {
   type Registry,
   type Settings,
 } from "@/lib/defaults";
+import { MAX_MEAL_LABEL, MAX_MEAL_LABELS } from "@/lib/meals";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/text";
 
@@ -107,6 +108,7 @@ function LocalePair({
   value,
   t,
   rows = 1,
+  maxLength,
   className = "",
 }: {
   name: string;
@@ -114,6 +116,8 @@ function LocalePair({
   t: Dictionary;
   /** Starting height in lines. Grows by dragging regardless. */
   rows?: number;
+  /** Set where the stored value has a hard limit, so the field cannot exceed it. */
+  maxLength?: number;
   className?: string;
 }) {
   const id = useId();
@@ -131,6 +135,7 @@ function LocalePair({
           name={`${name}.en`}
           defaultValue={value.en}
           rows={rows}
+          maxLength={maxLength}
         />
       </div>
       <div>
@@ -143,6 +148,7 @@ function LocalePair({
           name={`${name}.es`}
           defaultValue={value.es}
           rows={rows}
+          maxLength={maxLength}
         />
       </div>
     </div>
@@ -711,6 +717,7 @@ export function SettingsForm({
                     name={`mealOptions.${index}`}
                     value={row.value}
                     t={t}
+                    maxLength={MAX_MEAL_LABEL}
                     className="flex-1"
                   />
                   {/* An empty label of the same size pushes the button down to
@@ -733,7 +740,18 @@ export function SettingsForm({
                 </li>
               ))}
             </ul>
-            <Button type="button" variant="secondary" onClick={addMeal} className="mt-3">
+            {/*
+              * Stops at the number the catering tally can hold. The save
+              * action checks the real rule — an option counts once per
+              * language — and says so if a bilingual menu goes over.
+              */}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addMeal}
+              disabled={meals.length >= MAX_MEAL_LABELS}
+              className="mt-3"
+            >
               {t.settings.addMealOption}
             </Button>
           </div>

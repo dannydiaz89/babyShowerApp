@@ -260,17 +260,21 @@ The headline numbers come from a single `rsvpTotals` row that every write to
 adding it up — Convex has no count operator, and a whole-table read stops
 working once the table is large enough.
 
-Meal tallies are stored as `{ meal, count }` entries rather than keyed by meal
-name: Convex record keys must be ASCII, and you name the meal options yourself.
-A menu with "Niños" or "Entrée" on it would otherwise make every RSVP choosing
-that option fail to save.
+Meal tallies are **one document per meal**, not a field on that row. Anything
+stored on the totals row is rewritten by every RSVP write, so it has to stay a
+fixed size for ever — a growing list of meals would eventually pass the
+document size limit and take every RSVP down with it. Capping the list instead
+only moved the failure somewhere quieter: a meal past the cap was simply
+missing from the catering numbers you order food against, with nothing on
+screen to say so. A document each has neither problem, and nothing turns a
+configured meal away.
 
-Because that one document is patched by every RSVP write, what goes into it is
-bounded twice over. The RSVP action refuses a meal that isn't on your menu —
-the form offers a `<select>`, but a Server Action is a public endpoint and the
-markup constrains nothing — and the tally itself tracks at most 64 distinct
-meals with labels up to 120 characters. Without both, a guest could grow the
-document past Convex's size limit and every later RSVP would roll back.
+The RSVP action still refuses a meal that isn't on your menu — the form offers
+a `<select>`, but a Server Action is a public endpoint and the markup
+constrains nothing — so guests cannot invent meals. Meal labels are also never
+Convex record keys, because those must be ASCII and you name the options
+yourself; "Niños" or "Entrée" would otherwise make every RSVP choosing that
+option fail to save.
 
 The table reads 200 replies at a time and offers **Load more**, because the
 table is where you edit, merge and delete — the CSV is read-only, so it is not

@@ -145,6 +145,7 @@ export const en = {
     totalReplies: "total replies",
     catering: "Catering",
     allergyNote: "{count} with allergy notes — check the table",
+    mealsPartial: "Only the first meals are shown here. The CSV has every reply's choice.",
 
     downloadCsv: "Download CSV",
     viewSite: "View site",
@@ -298,6 +299,10 @@ export const en = {
     mealOptions: "Meal options",
     addMealOption: "Add an option",
     removeMealOption: "Remove this option",
+    tooManyMealOptions:
+      "That is {count} meal labels across the two languages, and the catering breakdown can only tally {max}. Please remove some options.",
+    mealOptionTooLong:
+      "One meal option is too long to appear in the catering breakdown. Keep each label under {max} characters.",
 
     guestPassword: "New guest password",
     guestPasswordHint:
@@ -461,6 +466,8 @@ export const es: Dictionary = {
     totalReplies: "respuestas en total",
     catering: "Comida",
     allergyNote: "{count} con notas de alergias — revisen la tabla",
+    mealsPartial:
+      "Aquí solo se muestran las primeras comidas. El CSV incluye la elección de cada respuesta.",
 
     downloadCsv: "Descargar CSV",
     viewSite: "Ver el sitio",
@@ -612,6 +619,10 @@ export const es: Dictionary = {
     mealOptions: "Opciones de comida",
     addMealOption: "Agregar una opción",
     removeMealOption: "Eliminar esta opción",
+    tooManyMealOptions:
+      "Son {count} etiquetas de comida entre los dos idiomas, y el resumen de catering solo puede contar {max}. Por favor quiten algunas opciones.",
+    mealOptionTooLong:
+      "Una opción de comida es demasiado larga para aparecer en el resumen de catering. Usen menos de {max} caracteres por etiqueta.",
 
     guestPassword: "Nueva contraseña de invitados",
     guestPasswordHint:

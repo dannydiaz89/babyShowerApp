@@ -52,11 +52,14 @@ the family reads the wrong language.
   becomes an entry in one shared totals document, so an unchecked value is an
   availability problem rather than an untidy one.
 - **`convex/rsvps` totals** — the arithmetic behind every number on the
-  dashboard, including that meal names are values and never object keys.
-  Convex record keys must be ASCII, so keying by meal name made an RSVP
-  choosing "Niños" or "Entrée" fail to save outright. Also that the tally
-  stays bounded whatever is thrown at it: every RSVP write patches that one
-  document, and one that can grow without limit eventually blocks all of them.
+  dashboard: that taking a reply back undoes exactly what adding it did, and
+  what each write moves a meal's tally by.
+- **meals, end to end** (`tests/meals-end-to-end.test.ts`) — that a meal the
+  settings form accepts always reaches the catering totals. This one is spread
+  across the settings boundary, the RSVP action and the tally on purpose,
+  because it is where they twice drifted apart: first a cap silently dropped
+  meals settings had accepted, then aligning the two limits still let labels
+  from an older menu crowd out a new option.
 
 ## Two things worth knowing
 

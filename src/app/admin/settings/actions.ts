@@ -6,7 +6,8 @@ import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
 import { hashPassword } from "@/lib/password";
-import { getTranslation } from "@/lib/i18n";
+import { fill, getTranslation } from "@/lib/i18n";
+import { checkMealOptions } from "@/lib/meals";
 import {
   SETTINGS_TABS,
   type SettingsState,
@@ -122,6 +123,30 @@ export async function saveSettings(
   const tab = String(formData.get("tab") ?? "") as SettingsTab;
   if (!SETTINGS_TABS.includes(tab)) {
     return { status: "error", message: t.settings.saveFailed };
+  }
+
+  /*
+   * The catering breakdown is a capped array in one shared document — capped
+   * so it cannot grow until it blocks every RSVP write. Saving a menu the
+   * tally cannot hold would be worse than refusing it: the option would save,
+   * guests would pick it, and it would simply be absent from the numbers the
+   * hosts order food against, with nothing on screen to say so.
+   */
+  if (tab === "form") {
+    const problem = checkMealOptions(readMealOptions(formData));
+    if (problem) {
+      return {
+        status: "error",
+        tab,
+        message:
+          problem.kind === "too-many"
+            ? fill(t.settings.tooManyMealOptions, {
+                count: problem.labels,
+                max: problem.max,
+              })
+            : fill(t.settings.mealOptionTooLong, { max: problem.max }),
+      };
+    }
   }
 
   try {

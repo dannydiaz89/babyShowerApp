@@ -217,6 +217,13 @@ export default async function DashboardPage({
                 {fill(t.admin.allergyNote, { count: stats.withDietaryNotes })}
               </p>
             ) : null}
+            {/*
+              * Reading the tallies is bounded. Saying the list is partial
+              * beats showing fewer meals than there are to cook.
+              */}
+            {stats.mealCountsPartial ? (
+              <p className="text-sm text-ink-muted">{t.admin.mealsPartial}</p>
+            ) : null}
           </Card>
         ) : null}
 
