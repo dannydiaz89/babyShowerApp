@@ -29,11 +29,13 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "convex-test": "^0.0.56",
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.24",
     "tailwindcss": "^4.0.0",

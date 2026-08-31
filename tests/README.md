@@ -7,7 +7,7 @@ covers and where a new one belongs:
 | --- | --- |
 | `src/lib/auth.ts` | `tests/lib/auth.test.ts` |
 | `src/lib/i18n/text.ts` | `tests/lib/i18n/text.test.ts` |
-| `convex/rsvps.ts` | `tests/convex/rsvps.test.ts`, `tests/convex/totals.test.ts` |
+| `convex/rsvps.ts` | `tests/convex/rsvps.test.ts`, `tests/convex/totals.test.ts`, `tests/convex/rebuild.test.ts` |
 | `src/app/rsvp/actions.ts` | `tests/app/rsvp-actions.test.ts` |
 
 ```bash
@@ -54,6 +54,14 @@ the family reads the wrong language.
 - **`convex/rsvps` totals** — the arithmetic behind every number on the
   dashboard: that taking a reply back undoes exactly what adding it did, and
   what each write moves a meal's tally by.
+- **`convex/rsvps` against a database** (`tests/convex/rebuild.test.ts`) — the
+  real mutations run against a real database via `convex-test`, because some
+  bugs are only reachable that way. A rebuild once read a bounded page of meal
+  tallies and deleted only those, then inserted a fresh row for every meal in
+  the table: past that bound the leftovers stayed, and a meal that was both
+  left over and still current ended up with two rows — after which every write
+  for it threw on the unique lookup. No amount of testing the arithmetic in
+  isolation reaches that code.
 - **meals, end to end** (`tests/meals-end-to-end.test.ts`) — that a meal the
   settings form accepts always reaches the catering totals. This one is spread
   across the settings boundary, the RSVP action and the tally on purpose,
@@ -75,6 +83,16 @@ removing the Server Action session check, letting an outage fall back to
 `SITE_PASSWORD` — and confirming each one turns the suite red. If you add a
 test, try breaking what it covers and make sure it fails. One test here
 originally passed for the wrong reason and only that exercise caught it.
+
+## Two kinds of test here
+
+Most of these are pure functions, called directly. The Convex ones in
+`tests/convex/rebuild.test.ts` are different: they use
+[`convex-test`](https://docs.convex.dev/testing/convex-test) to run the real
+mutations against a real database, and carry a
+`// @vitest-environment edge-runtime` docblock because that is the runtime
+Convex functions actually run in. Reach for those whenever the behaviour
+involves reading or writing documents rather than computing a value.
 
 ## What is not covered
 

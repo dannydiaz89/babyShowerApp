@@ -298,8 +298,10 @@ pnpm check:contrast
 ### Tests
 
 Vitest, no browser. `tests/` mirrors the source tree, so a test's path says
-what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. See
-[tests/README.md](tests/README.md) for what is covered and why.
+what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. Most are
+pure functions; the Convex ones run the real mutations against a real database
+with `convex-test`. See [tests/README.md](tests/README.md) for what is covered
+and why.
 
 They target the places where a quiet bug costs something real: a guest cookie
 opening the admin dashboard, a guest counted twice, an allergy note lost in a

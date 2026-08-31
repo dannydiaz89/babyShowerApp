@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import schema from "./schema";
 import { assertServer } from "./guard";
-import { MEAL_TALLY_READ_LIMIT } from "./limits";
+import { MEAL_TALLY_READ_LIMIT, MEAL_TALLY_REBUILD_LIMIT } from "./limits";
 
 const rsvpFields = {
   name: v.string(),
@@ -406,6 +406,25 @@ export const rebuildTotals = mutation({
       );
     }
 
+    /*
+     * Read every tally before writing anything.
+     *
+     * Reconciling against a partial view is what makes this dangerous: the
+     * unseen rows survive, and inserting a fresh row for a meal that already
+     * had one leaves two under the same name — after which every write for
+     * that meal fails on `adjustMealTally`'s unique lookup. Refusing here
+     * leaves the data exactly as it was.
+     */
+    const tallies = await ctx.db
+      .query("mealTallies")
+      .take(MEAL_TALLY_REBUILD_LIMIT + 1);
+    if (tallies.length > MEAL_TALLY_REBUILD_LIMIT) {
+      throw new Error(
+        `Too many meal tallies (over ${MEAL_TALLY_REBUILD_LIMIT}) to rebuild in ` +
+          "one transaction. Nothing was changed."
+      );
+    }
+
     let totals = zeroTotals();
     for (const row of rows) totals = applyRow(totals, row, 1);
 
@@ -414,17 +433,30 @@ export const rebuildTotals = mutation({
     else await ctx.db.insert("rsvpTotals", { singleton: "totals" as const, ...totals });
 
     /*
-     * Meal tallies are replaced rather than adjusted: a rebuild exists to
-     * discard whatever was there, including a label no reply carries any more.
+     * Reconcile rather than delete-then-insert: correct the rows that should
+     * stay, remove the rest, add what is missing. Nothing is inserted for a
+     * meal that already has a row, so a duplicate cannot be created here even
+     * if an earlier rebuild left the table in a state this one has to clean up.
      */
-    const stale = await ctx.db.query("mealTallies").take(MEAL_TALLY_READ_LIMIT + 1);
-    for (const row of stale) await ctx.db.delete(row._id);
-
     const counts = mealDeltas(rows.map((row) => ({ row, sign: 1 as const })));
+    const kept = new Set<string>();
+
+    for (const tally of tallies) {
+      const count = counts.get(tally.meal) ?? 0;
+      // Not carried by any reply any more, or a second row for a meal already
+      // handled — the shape an interrupted rebuild used to leave behind.
+      if (count <= 0 || kept.has(tally.meal)) {
+        await ctx.db.delete(tally._id);
+        continue;
+      }
+      kept.add(tally.meal);
+      if (tally.count !== count) await ctx.db.patch(tally._id, { count });
+    }
+
     const mealCounts: MealCount[] = [];
     for (const [meal, count] of counts) {
       if (count <= 0) continue;
-      await ctx.db.insert("mealTallies", { meal, count });
+      if (!kept.has(meal)) await ctx.db.insert("mealTallies", { meal, count });
       mealCounts.push({ meal, count });
     }
 
