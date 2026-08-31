@@ -47,10 +47,16 @@ the family reads the wrong language.
 - **`lib/paging`** — that walking the RSVP pages leaves no reply behind, and
   stops rather than spinning if a pager never advances. A row the dashboard
   drops is a guest who cannot be edited, merged or deleted at all.
+- **`lib/meals`** — that only a meal on the menu is accepted, in either
+  language, and that guest free text is length-bounded. The submitted meal
+  becomes an entry in one shared totals document, so an unchecked value is an
+  availability problem rather than an untidy one.
 - **`convex/rsvps` totals** — the arithmetic behind every number on the
   dashboard, including that meal names are values and never object keys.
   Convex record keys must be ASCII, so keying by meal name made an RSVP
-  choosing "Niños" or "Entrée" fail to save outright.
+  choosing "Niños" or "Entrée" fail to save outright. Also that the tally
+  stays bounded whatever is thrown at it: every RSVP write patches that one
+  document, and one that can grow without limit eventually blocks all of them.
 
 ## Two things worth knowing
 

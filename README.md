@@ -265,9 +265,17 @@ name: Convex record keys must be ASCII, and you name the meal options yourself.
 A menu with "Niños" or "Entrée" on it would otherwise make every RSVP choosing
 that option fail to save.
 
+Because that one document is patched by every RSVP write, what goes into it is
+bounded twice over. The RSVP action refuses a meal that isn't on your menu —
+the form offers a `<select>`, but a Server Action is a public endpoint and the
+markup constrains nothing — and the tally itself tracks at most 64 distinct
+meals with labels up to 120 characters. Without both, a guest could grow the
+document past Convex's size limit and every later RSVP would roll back.
+
 The table reads 200 replies at a time and offers **Load more**, because the
 table is where you edit, merge and delete — the CSV is read-only, so it is not
-a substitute for a row you cannot see. The export walks every page.
+a substitute for a row you cannot see. Past 5,000 rows on one page it stops
+offering and points at the export instead. The export walks every page.
 
 An existing deployment, or one restored from a backup, has no totals row yet.
 The first dashboard visit builds it once (`rsvps.rebuildTotals`) and it stays

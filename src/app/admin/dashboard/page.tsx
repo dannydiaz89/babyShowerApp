@@ -138,6 +138,8 @@ export default async function DashboardPage({
   }
 
   const rsvps = replies.rows;
+  // requestedRows clamps to MAX_ROWS, so asking for more would return here.
+  const atCap = wanted >= MAX_ROWS;
   const meals = [...stats.mealCounts].sort((a, b) => b.count - a.count);
 
   /*
@@ -228,23 +230,40 @@ export default async function DashboardPage({
 
         {replies.more ? (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
-            <p className="text-sm text-ink-muted">
-              {fill(t.admin.showingRecent, {
-                count: rsvps.length,
-                total: stats.responses,
-              })}
-            </p>
-            {/*
-              * A link, not a button: the table is server-rendered, and every
-              * row has to stay editable rather than only exportable.
-              */}
-            <ButtonLink
-              href={`/admin/dashboard?rows=${wanted + PAGE_SIZE}`}
-              variant="secondary"
-              size="sm"
-            >
-              {t.admin.loadMore}
-            </ButtonLink>
+            {atCap ? (
+              /*
+               * Past the rendering cap "Load more" would ask for rows that get
+               * clamped straight back, reloading the same page forever. Say
+               * where the rest are instead of offering a button that does
+               * nothing.
+               */
+              <p className="text-sm text-ink-muted">
+                {fill(t.admin.tableCapped, {
+                  count: rsvps.length,
+                  total: stats.responses,
+                })}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-ink-muted">
+                  {fill(t.admin.showingRecent, {
+                    count: rsvps.length,
+                    total: stats.responses,
+                  })}
+                </p>
+                {/*
+                  * A link, not a button: the table is server-rendered, and
+                  * every row has to stay editable rather than only exportable.
+                  */}
+                <ButtonLink
+                  href={`/admin/dashboard?rows=${wanted + PAGE_SIZE}`}
+                  variant="secondary"
+                  size="sm"
+                >
+                  {t.admin.loadMore}
+                </ButtonLink>
+              </>
+            )}
           </div>
         ) : null}
       </main>

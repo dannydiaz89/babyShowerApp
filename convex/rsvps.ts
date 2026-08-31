@@ -89,17 +89,37 @@ type Counted = Pick<
   "attending" | "adults" | "kids" | "meal" | "dietaryNotes"
 >;
 
+/*
+ * The tally lives in one shared document, and every RSVP write patches it. If
+ * it can grow without limit it eventually passes Convex's document size and
+ * array length caps, and from that point on *every* RSVP write rolls back —
+ * one guest's input taking the whole form down.
+ *
+ * The RSVP action already refuses a meal that is not on the menu. These are
+ * the structural limits underneath that: whatever any caller sends, this
+ * aggregate stays small. Far above any real menu, so they only bite under
+ * abuse — at which point an undercounted tally is a much better failure than
+ * a form nobody can submit, and `rebuildTotals` puts it right.
+ */
+export const MAX_TRACKED_MEALS = 64;
+export const MAX_MEAL_LABEL = 120;
+
 /** Move one meal's tally by `delta`, adding or dropping the entry as needed. */
 function withMeal(counts: MealCount[], meal: string, delta: number): MealCount[] {
-  const seen = counts.some((entry) => entry.meal === meal);
-  const moved = seen
-    ? counts.map((entry) =>
-        entry.meal === meal ? { meal, count: entry.count + delta } : entry
-      )
-    : [...counts, { meal, count: delta }];
+  const known = counts.some((entry) => entry.meal === meal);
 
-  // Drop a meal nobody has left, so this stays as short as the menu.
-  return moved.filter((entry) => entry.count > 0);
+  if (!known) {
+    // Taking back a meal that was never tracked is simply nothing to do.
+    if (delta <= 0) return counts;
+    if (meal.length > MAX_MEAL_LABEL) return counts;
+    if (counts.length >= MAX_TRACKED_MEALS) return counts;
+    return [...counts, { meal, count: delta }];
+  }
+
+  return counts
+    .map((entry) => (entry.meal === meal ? { meal, count: entry.count + delta } : entry))
+    // Drop a meal nobody has left, so this stays as short as the menu.
+    .filter((entry) => entry.count > 0);
 }
 
 /** Add (`sign` 1) or take back (`sign` -1) one row's contribution. */

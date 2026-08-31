@@ -41,6 +41,20 @@ describe("requestedRows", () => {
     expect(requestedRows("999999", bounds)).toBe(5000);
     expect(requestedRows("Infinity", bounds)).toBe(200);
   });
+
+  /*
+   * This clamp is why the dashboard hides "Load more" at the cap rather than
+   * always offering it: the link asks for one step past the maximum, which
+   * comes straight back as the maximum, so the button would reload the same
+   * page for ever. Past the cap the CSV is the answer, and the page says so.
+   */
+  it("is a no-op one step past the maximum, which is why the link hides", () => {
+    const atCap = requestedRows(String(bounds.max), bounds);
+    const oneMore = requestedRows(String(atCap + bounds.step), bounds);
+
+    expect(atCap).toBe(bounds.max);
+    expect(oneMore).toBe(atCap);
+  });
 });
 
 describe("collectPages", () => {

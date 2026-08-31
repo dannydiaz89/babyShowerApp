@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { applyRow, zeroTotals, type Totals } from "../../convex/rsvps";
+import {
+  MAX_MEAL_LABEL,
+  MAX_TRACKED_MEALS,
+  applyRow,
+  zeroTotals,
+  type Totals,
+} from "../../convex/rsvps";
 
 /**
  * The dashboard's numbers are a stored row rather than a scan of the table, so
@@ -125,5 +131,78 @@ describe("applyRow", () => {
 
     expect(first.mealCounts).toEqual([{ meal: "Vegan", count: 2 }]);
     expect(second.mealCounts).toEqual([{ meal: "Vegan", count: 4 }]);
+  });
+});
+
+/**
+ * The tally lives in one document that every RSVP write patches. If it can
+ * grow without limit it eventually passes Convex's document size and array
+ * length caps, and from then on every RSVP write rolls back — one guest's
+ * input taking the whole form down for everyone. The action refuses a meal
+ * that is not on the menu; these are the limits underneath that.
+ */
+describe("applyRow keeps the shared aggregate bounded", () => {
+  const withMeal = (meal: string) => ({
+    attending: true,
+    adults: 1,
+    kids: 0,
+    meal,
+    dietaryNotes: undefined,
+  });
+
+  it("stops tracking new meals past the cap", () => {
+    let totals = zeroTotals();
+    for (let i = 0; i < MAX_TRACKED_MEALS + 50; i++) {
+      totals = applyRow(totals, withMeal(`meal-${i}`), 1);
+    }
+
+    expect(totals.mealCounts).toHaveLength(MAX_TRACKED_MEALS);
+    // The replies themselves are still counted; only the tally is capped.
+    expect(totals.responses).toBe(MAX_TRACKED_MEALS + 50);
+  });
+
+  it("still counts a meal it is already tracking once the cap is reached", () => {
+    let totals = zeroTotals();
+    for (let i = 0; i < MAX_TRACKED_MEALS + 10; i++) {
+      totals = applyRow(totals, withMeal(`meal-${i}`), 1);
+    }
+    totals = applyRow(totals, withMeal("meal-0"), 1);
+
+    expect(totals.mealCounts.find((m) => m.meal === "meal-0")?.count).toBe(2);
+    expect(totals.mealCounts).toHaveLength(MAX_TRACKED_MEALS);
+  });
+
+  it("refuses a label long enough to bloat the document on its own", () => {
+    const huge = "X".repeat(MAX_MEAL_LABEL + 1);
+    const totals = applyRow(zeroTotals(), withMeal(huge), 1);
+
+    expect(totals.mealCounts).toEqual([]);
+    expect(totals.responses).toBe(1);
+  });
+
+  it("accepts a label right at the limit", () => {
+    const atLimit = "X".repeat(MAX_MEAL_LABEL);
+    expect(applyRow(zeroTotals(), withMeal(atLimit), 1).mealCounts).toEqual([
+      { meal: atLimit, count: 1 },
+    ]);
+  });
+
+  it("does not invent an entry when taking back an untracked meal", () => {
+    // Deleting a reply whose meal was never tracked must not create one, and
+    // must never leave a negative count behind.
+    const totals = applyRow(zeroTotals(), withMeal("never-tracked"), -1);
+
+    expect(totals.mealCounts).toEqual([]);
+    expect(totals.responses).toBe(-1);
+  });
+
+  it("stays bounded no matter how much junk is thrown at it", () => {
+    let totals = zeroTotals();
+    for (let i = 0; i < 500; i++) {
+      totals = applyRow(totals, withMeal(`${"y".repeat(200)}-${i}`), 1);
+    }
+
+    expect(totals.mealCounts).toEqual([]);
+    expect(JSON.stringify(totals).length).toBeLessThan(200);
   });
 });

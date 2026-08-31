@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { api } from "../../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
 import { getTranslation } from "@/lib/i18n";
+import { boundedText, isOfferedMeal } from "@/lib/meals";
 import { hasGuestAccess } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 
@@ -26,8 +27,14 @@ export type RsvpState = {
 /** Anyone with the guest password could otherwise flood the headcount. */
 const SUBMISSIONS_PER_HOUR = 12;
 
+/**
+ * One field, trimmed and length-bounded.
+ *
+ * Bounded because this is a public endpoint: nothing but this stops a guest
+ * from storing a megabyte in a field the dashboard then has to read back.
+ */
 function text(formData: FormData, key: string): string {
-  return String(formData.get(key) ?? "").trim();
+  return boundedText(String(formData.get(key) ?? ""));
 }
 
 function count(formData: FormData, key: string, fallback: number): number {
@@ -62,8 +69,19 @@ export async function submitRsvp(
 
   const adults = count(formData, "adults", 1);
 
+  /*
+   * The form offers a <select>, but this action is reachable by POST without
+   * it, and the value ends up as an entry in the dashboard's shared totals
+   * document. Left unchecked, enough distinct values push that one document
+   * past Convex's size limit and every later RSVP write rolls back — so a
+   * meal has to be one the hosts actually put on the menu.
+   */
+  const meal = settings.askMeal ? text(formData, "meal") : "";
+  const mealIsOffered = !meal || isOfferedMeal(meal, settings.mealOptions);
+
   const errors: Record<string, string> = {};
   if (!name) errors.name = t.rsvp.errNameRequired;
+  if (!mealIsOffered) errors.meal = t.rsvp.errMealInvalid;
 
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     errors.email = t.rsvp.errEmailInvalid;
@@ -95,7 +113,7 @@ export async function submitRsvp(
     adults: String(adults),
     kids: String(count(formData, "kids", 0)),
     guestNames: text(formData, "guestNames"),
-    meal: text(formData, "meal"),
+    meal,
     dietaryNotes: text(formData, "dietaryNotes"),
     message: text(formData, "message"),
   };
@@ -133,7 +151,7 @@ export async function submitRsvp(
       adults,
       kids: settings.allowKids ? count(formData, "kids", 0) : 0,
       guestNames: text(formData, "guestNames") || undefined,
-      meal: settings.askMeal ? text(formData, "meal") || undefined : undefined,
+      meal: meal || undefined,
       dietaryNotes: text(formData, "dietaryNotes") || undefined,
       message: text(formData, "message") || undefined,
     });

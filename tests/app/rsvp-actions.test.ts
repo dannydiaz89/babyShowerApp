@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../../src/lib/i18n/dictionaries";
+import { MAX_TEXT } from "../../src/lib/meals";
 
 /**
  * A Server Action is its own public POST endpoint. Middleware does not run for
@@ -137,5 +138,67 @@ describe("submitRsvp authorization", () => {
     expect(result.status).toBe("error");
     expect(result.errors?.name).toBe(en.rsvp.errNameRequired);
     expect(mutation).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The form renders a <select>, but this action is reachable by POST without
+ * it. Whatever arrives becomes an entry in the dashboard's one shared totals
+ * document, so an unchecked meal is an availability problem: enough distinct
+ * or long values push that document past Convex's size limit, and from then
+ * on every RSVP write — everyone's — rolls back.
+ */
+describe("submitRsvp meal validation", () => {
+  beforeEach(async () => {
+    cookieJar.set(GUEST_COOKIE, await createToken("guest"));
+  });
+
+  it("accepts a meal the hosts put on the menu", async () => {
+    const result = await submitRsvp({ status: "idle" }, form({ ...VALID, meal: "Vegan" }));
+
+    expect(result.status).toBe("success");
+  });
+
+  it("accepts the Spanish label for the same option", async () => {
+    const result = await submitRsvp({ status: "idle" }, form({ ...VALID, meal: "Vegano" }));
+
+    expect(result.status).toBe("success");
+  });
+
+  it("refuses a meal that is not on the menu, and writes nothing", async () => {
+    const result = await submitRsvp(
+      { status: "idle" },
+      form({ ...VALID, meal: "junk-meal-0" })
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.errors?.meal).toBe(en.rsvp.errMealInvalid);
+    expect(mutation).not.toHaveBeenCalled();
+  });
+
+  it("refuses a label long enough to bloat the shared totals document", async () => {
+    const result = await submitRsvp(
+      { status: "idle" },
+      form({ ...VALID, meal: "X".repeat(4000) })
+    );
+
+    expect(result.errors?.meal).toBe(en.rsvp.errMealInvalid);
+    expect(mutation).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a reply with no meal chosen", async () => {
+    const result = await submitRsvp({ status: "idle" }, form(VALID));
+
+    expect(result.status).toBe("success");
+  });
+
+  it("caps free text a guest could otherwise use to bloat the guest list", async () => {
+    await submitRsvp(
+      { status: "idle" },
+      form({ ...VALID, message: "x".repeat(10_000) })
+    );
+
+    const [, written] = mutation.mock.calls.at(-1)!;
+    expect(String(written.message)).toHaveLength(MAX_TEXT);
   });
 });
