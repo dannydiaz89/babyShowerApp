@@ -1,0 +1,284 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   DESIGN TOKENS — the single source of truth.
+   Nothing outside this block should hard-code a color, radius, or shadow.
+   Components in src/components/ui/ are the only place tokens become styles;
+   pages compose those components and never reach for raw values.
+
+   Theme: "Over the Moon" — powder blue, white, and gold, drawn from the
+   decor photo. Every text pair below was checked against WCAG AA (4.5:1),
+   not estimated. See scripts/check-contrast.mjs.
+   ============================================================================ */
+@theme {
+  /* --- Surfaces ---------------------------------------------------------- */
+  --color-canvas: #f2f6fa;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #e6eef6;
+
+  /* --- Lines ------------------------------------------------------------- */
+  /* Hairlines between content. Decorative; carries no meaning on its own. */
+  --color-border: #d7e2ec;
+  /* The boundary of a form field. This one IS the only thing marking where
+     an input begins, so it clears the 3:1 WCAG 1.4.11 floor for UI
+     component boundaries. Deliberately darker than --color-border. */
+  --color-border-field: #8197ac;
+  /* Hover emphasis on an already-visible edge. */
+  --color-border-strong: #93aec9;
+
+  /* --- Text. Every value below clears WCAG AA (4.5:1) on the grounds it
+         is actually rendered on. Verified, not assumed. ------------------- */
+  --color-ink: #222b35;
+  --color-ink-muted: #5a6673;
+  /* Placeholders only. Sits on surface normally and on danger-soft when the
+     field is invalid — kept dark enough to clear AA on both. */
+  --color-ink-subtle: #5d6976;
+
+  /* --- Accent ------------------------------------------------------------ */
+  --color-accent: #3f5f7e;
+  --color-accent-hover: #33506c;
+  --color-accent-soft: #dbe8f4;
+  --color-accent-ink: #3f5f7e;
+  /* Decorative only — too light for text. Icons, rules, ornament. */
+  --color-accent-line: #8ba6c0;
+
+  /* --- Gold. Ornament and readable text are different values: the gold from
+         the photo is lovely as a hairline or a star and far too light to
+         read at 2.4:1, so anything that becomes words uses gold-ink. ------ */
+  --color-gold: #c8a54e;
+  --color-gold-ink: #7a5c1f;
+
+  /* --- Status. Deliberately outside the accent hue: "attending" and
+         "declined" have to be distinguishable at a glance in a dense table,
+         which two shades of the same blue cannot do. Both clear AA on their
+         own soft ground and on every page surface. --------------------------- */
+  --color-success: #3f6b45;
+  --color-success-soft: #dcefe1;
+  --color-danger: #a83a34;
+  --color-danger-soft: #f9e2e0;
+
+  --color-on-accent: #ffffff;
+
+  /* --- Radius. Deliberately no fully-rounded step: this design uses soft
+         rectangles, not pills. ---------------------------------------------- */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.125rem;
+
+  /* --- Elevation. Shadow is tinted with the ink, so it reads as depth in
+         this palette rather than as grey haze. ---------------------------- */
+  --shadow-raised: 0 1px 2px rgba(34, 43, 53, 0.05),
+    0 12px 32px -20px rgba(34, 43, 53, 0.32);
+  --shadow-overlay: 0 24px 60px -20px rgba(34, 43, 53, 0.45);
+
+  /* --- Type -------------------------------------------------------------- */
+  --font-display: var(--font-cormorant), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ============================================================================
+   BASE LAYER — element defaults only. No component styling lives here.
+   ============================================================================ */
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One focus treatment for the whole app. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Visually hidden, still announced by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* A soft wash behind the page — moonlight from above, a warm gold rise at
+   the horizon. Ornament, not structure. */
+.bloom {
+  background-image:
+    radial-gradient(70ch 50ch at 12% -10%, rgba(63, 95, 126, 0.14), transparent 65%),
+    radial-gradient(60ch 45ch at 95% 8%, rgba(200, 165, 78, 0.14), transparent 62%),
+    radial-gradient(70ch 55ch at 50% 108%, rgba(63, 95, 126, 0.11), transparent 65%);
+}
+
+/* ============================================================================
+   ORNAMENT — the arrival lap on the gate.
+
+   An Orion traces one ellipse around the moon as the page loads, then parks.
+   Two keyframe sets on a single element: no JavaScript, no canvas, and it runs
+   on the compositor so it will not fight the password field for the main
+   thread on an older phone. Lives here rather than in a component because
+   offset-path animation has no Tailwind expression.
+   ============================================================================ */
+/* The mark doubles as the control that replays the lap. No button chrome —
+   it should read as the moon it is — but it still gets a cursor and the app's
+   one focus treatment. */
+.arrival-replay {
+  cursor: pointer;
+}
+
+.arrival {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 264px;
+  height: 124px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.arrival-craft {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 36px;
+  color: var(--color-accent);
+  offset-path: path("M 20,62 A 112,44 0 1,1 244,62 A 112,44 0 1,1 20,62");
+  offset-rotate: auto 0deg;
+  offset-anchor: center;
+  animation:
+    orion-travel 6.5s linear 1 both,
+    orion-depth 6.5s linear 1 both,
+    orion-fade 0.9s ease both;
+}
+
+.arrival-trace {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  animation: orion-fade 1.2s ease 0.2s both;
+}
+
+.arrival-trace ellipse {
+  fill: none;
+  stroke: var(--color-gold);
+  stroke-width: 1;
+  stroke-dasharray: 1.5 7;
+  opacity: 0.38;
+}
+
+/* Position and depth are generated together by scripts/gen-orbit-keyframes.mjs.
+
+   The deceleration is baked into these values rather than expressed as an
+   animation timing function, because CSS applies a timing function between
+   each PAIR of keyframes, not across the whole timeline. An eased travel
+   against a linear depth drifts out of sync — the craft ends up shrinking
+   while it is in the near half of the path. Both run linear so they stay
+   locked; the curve lives in the numbers.
+
+   Depth is a function of path position, not time: the extremes of the ellipse
+   at 0% and 50% are the left and right, equally distant from the viewer. Far
+   and near are the top (25%, where it passes behind the moon) and the bottom
+   (75%). */
+@keyframes orion-travel {
+  0% { offset-distance: 0.00%; }
+  5% { offset-distance: 3.95%; }
+  10% { offset-distance: 8.65%; }
+  15% { offset-distance: 14.02%; }
+  20% { offset-distance: 20.00%; }
+  25% { offset-distance: 26.49%; }
+  30% { offset-distance: 33.36%; }
+  35% { offset-distance: 40.49%; }
+  40% { offset-distance: 47.74%; }
+  45% { offset-distance: 54.95%; }
+  50% { offset-distance: 61.98%; }
+  55% { offset-distance: 68.68%; }
+  60% { offset-distance: 74.94%; }
+  65% { offset-distance: 80.64%; }
+  70% { offset-distance: 85.69%; }
+  75% { offset-distance: 90.04%; }
+  80% { offset-distance: 93.62%; }
+  85% { offset-distance: 96.42%; }
+  90% { offset-distance: 98.42%; }
+  95% { offset-distance: 99.61%; }
+  100% { offset-distance: 100.00%; }
+}
+
+@keyframes orion-depth {
+  0% { transform: scale(0.850); opacity: 0.750; }
+  5% { transform: scale(0.813); opacity: 0.689; }
+  10% { transform: scale(0.772); opacity: 0.621; }
+  15% { transform: scale(0.734); opacity: 0.557; }
+  20% { transform: scale(0.707); opacity: 0.512; }
+  25% { transform: scale(0.701); opacity: 0.501; }
+  30% { transform: scale(0.720); opacity: 0.534; }
+  35% { transform: scale(0.766); opacity: 0.609; }
+  40% { transform: scale(0.829); opacity: 0.715; }
+  45% { transform: scale(0.896); opacity: 0.827; }
+  50% { transform: scale(0.953); opacity: 0.921; }
+  55% { transform: scale(0.988); opacity: 0.981; }
+  60% { transform: scale(1.000); opacity: 1.000; }
+  65% { transform: scale(0.991); opacity: 0.984; }
+  70% { transform: scale(0.967); opacity: 0.946; }
+  75% { transform: scale(0.938); opacity: 0.896; }
+  80% { transform: scale(0.908); opacity: 0.847; }
+  85% { transform: scale(0.883); opacity: 0.806; }
+  90% { transform: scale(0.865); opacity: 0.775; }
+  95% { transform: scale(0.854); opacity: 0.756; }
+  100% { transform: scale(0.850); opacity: 0.750; }
+}
+
+@keyframes orion-fade {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The rule above only collapses the duration, which would snap the craft to
+     wherever its lap happens to end. Park it somewhere chosen instead. An
+     object circling the screen unbidden is exactly what this preference exists
+     to stop, so on load the spacecraft is placed, not merely sped up.
+
+     Scoped to :not([data-played]) rather than overridden later, because an
+     !important author declaration outranks a CSS animation — left unscoped,
+     offset-distance would pin the craft in place even while the lap ran. */
+  .arrival[data-played="false"] .arrival-craft {
+    animation: none !important;
+    offset-distance: 12% !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+
+  .arrival[data-played="false"] .arrival-trace {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  /* Tapping the moon is the guest asking for the lap. This preference is about
+     motion nobody requested, so a requested one still plays: the !important
+     here is what outranks the blanket duration collapse above. */
+  .arrival[data-played="true"] .arrival-craft {
+    animation:
+      orion-travel 6.5s linear 1 both,
+      orion-depth 6.5s linear 1 both !important;
+  }
+
+  .arrival[data-played="true"] .arrival-trace {
+    animation: orion-fade 1.2s ease both !important;
+  }
+}
