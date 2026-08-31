@@ -149,8 +149,8 @@ export const en = {
     viewSite: "View site",
     settings: "Settings",
     noRsvps: "No RSVPs yet. They'll appear here as guests respond.",
-    showingRecent:
-      "Showing the {count} most recent replies of {total}. The CSV has every one.",
+    showingRecent: "Showing the {count} most recent replies of {total}.",
+    loadMore: "Load more",
 
     colGuest: "Guest",
     colReply: "Reply",
@@ -462,8 +462,8 @@ export const es: Dictionary = {
     viewSite: "Ver el sitio",
     settings: "Configuración",
     noRsvps: "Aún no hay confirmaciones. Aparecerán aquí conforme respondan.",
-    showingRecent:
-      "Mostrando las {count} respuestas más recientes de {total}. El CSV las incluye todas.",
+    showingRecent: "Mostrando las {count} respuestas más recientes de {total}.",
+    loadMore: "Mostrar más",
 
     colGuest: "Invitado",
     colReply: "Respuesta",

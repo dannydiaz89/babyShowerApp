@@ -201,6 +201,13 @@ if (clearing) {
   console.log("  · Elena & Hector Vargas — she booked for both, he booked again");
 }
 
+/*
+ * Build the totals before reading them. They are a stored row that each write
+ * keeps current, and a fresh deployment has no such row yet — writes made
+ * before it exists are deliberately not counted, because a later rebuild will
+ * count them. Without this the summary below reports zero on a new install.
+ */
+await client.mutation("rsvps:rebuildTotals", { key });
 const stats = await client.query("rsvps:stats", { key });
 console.log(
   `\nNow: ${stats.responses} responses, ${stats.totalGuests} guests ` +

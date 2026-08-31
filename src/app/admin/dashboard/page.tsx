@@ -1,10 +1,13 @@
+import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 import { signOut } from "@/app/actions";
 import { AdminHeader } from "@/components/SiteHeader";
 import { RsvpTable } from "@/components/RsvpTable";
 import {
   AnchorButton,
   Button,
+  ButtonLink,
   Card,
   Eyebrow,
   Overline,
@@ -12,6 +15,7 @@ import {
   StatGroup,
 } from "@/components/ui";
 import { convexClient, convexKey } from "@/lib/convex";
+import { collectPages, requestedRows } from "@/lib/paging";
 import { getTranslation, fill, pick, formatDate } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
 import type { Dictionary } from "@/lib/i18n";
@@ -19,21 +23,42 @@ import type { Dictionary } from "@/lib/i18n";
 // RSVPs change while the page is open; never serve this from a cache.
 export const dynamic = "force-dynamic";
 
+/** Rows per Convex read, and how many more "Load more" asks for. */
+const PAGE_SIZE = 200;
+
 /**
- * How many replies the table shows. The CSV export carries all of them, so a
- * shower large enough to pass this still has a complete list one click away.
+ * A ceiling on one render, so a runaway table cannot produce an endless page.
+ * Well past any shower; the CSV export is the answer beyond it.
  */
-const TABLE_ROWS = 200;
+const MAX_ROWS = 5000;
 
 function loadStats() {
   return convexClient().query(api.rsvps.stats, { key: convexKey() });
 }
 
-function loadPage() {
-  return convexClient().query(api.rsvps.page, {
-    key: convexKey(),
-    paginationOpts: { numItems: TABLE_ROWS, cursor: null },
-  });
+/**
+ * The newest `wanted` replies, read a bounded page at a time.
+ *
+ * Every row has to stay reachable — the table is where a host edits, merges
+ * and deletes, and the CSV is read-only — so "Load more" raises `wanted`
+ * rather than the list simply stopping. Each Convex read stays bounded either
+ * way, which is what keeps this working as the table grows.
+ */
+function loadRows(wanted: number) {
+  const client = convexClient();
+  const key = convexKey();
+
+  return collectPages<Doc<"rsvps">>(
+    async (numItems, cursor) => {
+      const result: FunctionReturnType<typeof api.rsvps.page> = await client.query(
+        api.rsvps.page,
+        { key, paginationOpts: { numItems, cursor } }
+      );
+      return { rows: result.page, cursor: result.continueCursor, done: result.isDone };
+    },
+    wanted,
+    PAGE_SIZE
+  );
 }
 
 /** Shown when Convex isn't wired up yet, instead of a bare 500. */
@@ -76,15 +101,27 @@ function SetupNeeded({ detail, t }: { detail: string; t: Dictionary }) {
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ rows?: string }>;
+}) {
   const { locale, t } = await getTranslation();
+  const wanted = requestedRows((await searchParams).rows, {
+    step: PAGE_SIZE,
+    max: MAX_ROWS,
+  });
 
   let stats: Awaited<ReturnType<typeof loadStats>>;
-  let replies: Awaited<ReturnType<typeof loadPage>>;
+  let replies: Awaited<ReturnType<typeof loadRows>>;
   let settings: Awaited<ReturnType<typeof getSettings>>;
 
   try {
-    [stats, replies, settings] = await Promise.all([loadStats(), loadPage(), getSettings()]);
+    [stats, replies, settings] = await Promise.all([
+      loadStats(),
+      loadRows(wanted),
+      getSettings(),
+    ]);
 
     /*
      * The totals are a stored row kept in step with every write, rather than a
@@ -100,8 +137,8 @@ export default async function DashboardPage() {
     return <SetupNeeded detail={error instanceof Error ? error.message : String(error)} t={t} />;
   }
 
-  const rsvps = replies.page;
-  const meals = Object.entries(stats.mealCounts).sort((a, b) => b[1] - a[1]);
+  const rsvps = replies.rows;
+  const meals = [...stats.mealCounts].sort((a, b) => b.count - a.count);
 
   /*
    * Dates are rendered to text here, on the server, and handed to the table as
@@ -167,9 +204,9 @@ export default async function DashboardPage() {
         {meals.length > 0 || stats.withDietaryNotes > 0 ? (
           <Card as="section" className="mt-4 flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-5">
             <Overline as="h2">{t.admin.catering}</Overline>
-            {meals.map(([meal, n]) => (
+            {meals.map(({ meal, count }) => (
               <p key={meal} className="text-sm text-ink">
-                <span className="font-display text-xl tabular-nums">{n}</span>{" "}
+                <span className="font-display text-xl tabular-nums">{count}</span>{" "}
                 <span className="text-ink-muted">{meal}</span>
               </p>
             ))}
@@ -181,15 +218,6 @@ export default async function DashboardPage() {
           </Card>
         ) : null}
 
-        {replies.isDone ? null : (
-          <p className="mt-6 text-sm text-ink-muted">
-            {fill(t.admin.showingRecent, {
-              count: rsvps.length,
-              total: stats.responses,
-            })}
-          </p>
-        )}
-
         <section className="mt-6">
           <RsvpTable
             rsvps={rows}
@@ -197,6 +225,28 @@ export default async function DashboardPage() {
             mealOptions={settings.mealOptions.map((option) => pick(option, locale))}
           />
         </section>
+
+        {replies.more ? (
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
+            <p className="text-sm text-ink-muted">
+              {fill(t.admin.showingRecent, {
+                count: rsvps.length,
+                total: stats.responses,
+              })}
+            </p>
+            {/*
+              * A link, not a button: the table is server-rendered, and every
+              * row has to stay editable rather than only exportable.
+              */}
+            <ButtonLink
+              href={`/admin/dashboard?rows=${wanted + PAGE_SIZE}`}
+              variant="secondary"
+              size="sm"
+            >
+              {t.admin.loadMore}
+            </ButtonLink>
+          </div>
+        ) : null}
       </main>
     </>
   );

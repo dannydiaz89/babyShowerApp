@@ -7,7 +7,7 @@ covers and where a new one belongs:
 | --- | --- |
 | `src/lib/auth.ts` | `tests/lib/auth.test.ts` |
 | `src/lib/i18n/text.ts` | `tests/lib/i18n/text.test.ts` |
-| `convex/rsvps.ts` | `tests/convex/rsvps.test.ts` |
+| `convex/rsvps.ts` | `tests/convex/rsvps.test.ts`, `tests/convex/totals.test.ts` |
 | `src/app/rsvp/actions.ts` | `tests/app/rsvp-actions.test.ts` |
 
 ```bash
@@ -43,6 +43,14 @@ the family reads the wrong language.
   control-character attempts.
 - **`lib/date-parts`** — that an impossible day like `2026-02-31` is rejected
   rather than stored and displayed as March 3rd.
+- **`lib/csv`** — that a guest-written cell cannot run as a spreadsheet formula.
+- **`lib/paging`** — that walking the RSVP pages leaves no reply behind, and
+  stops rather than spinning if a pager never advances. A row the dashboard
+  drops is a guest who cannot be edited, merged or deleted at all.
+- **`convex/rsvps` totals** — the arithmetic behind every number on the
+  dashboard, including that meal names are values and never object keys.
+  Convex record keys must be ASCII, so keying by meal name made an RSVP
+  choosing "Niños" or "Entrée" fail to save outright.
 
 ## Two things worth knowing
 

@@ -258,12 +258,21 @@ delete any row from the dashboard.
 The headline numbers come from a single `rsvpTotals` row that every write to
 `rsvps` updates in the same transaction, rather than from reading the table and
 adding it up — Convex has no count operator, and a whole-table read stops
-working once the table is large enough. The RSVP list itself is paginated; the
-CSV export walks every page.
+working once the table is large enough.
+
+Meal tallies are stored as `{ meal, count }` entries rather than keyed by meal
+name: Convex record keys must be ASCII, and you name the meal options yourself.
+A menu with "Niños" or "Entrée" on it would otherwise make every RSVP choosing
+that option fail to save.
+
+The table reads 200 replies at a time and offers **Load more**, because the
+table is where you edit, merge and delete — the CSV is read-only, so it is not
+a substitute for a row you cannot see. The export walks every page.
 
 An existing deployment, or one restored from a backup, has no totals row yet.
 The first dashboard visit builds it once (`rsvps.rebuildTotals`) and it stays
-current from then on.
+current from then on; `pnpm seed` builds it too, so its summary is not zero on
+a fresh install.
 
 ## Checks
 

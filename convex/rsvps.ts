@@ -44,13 +44,21 @@ export function toPhoneKey(phone: string | undefined): string | undefined {
  * unbounded read that eventually exceeds Convex's per-query limits — and the
  * per-IP submission limiter caps the rate, not the total.
  */
+export type MealCount = { meal: string; count: number };
+
 export type Totals = {
   responses: number;
   attendingParties: number;
   adults: number;
   kids: number;
   withDietaryNotes: number;
-  mealCounts: Record<string, number>;
+  /*
+   * An array, not a record keyed by meal name. Convex record keys must be
+   * ASCII and the hosts write these labels themselves, so a menu with "Niños"
+   * or "Entrée" on it would make every RSVP choosing that option fail to
+   * save — and, before the totals exist, would fail the first rebuild instead.
+   */
+  mealCounts: MealCount[];
 };
 
 const ZERO_TOTALS: Totals = {
@@ -59,8 +67,12 @@ const ZERO_TOTALS: Totals = {
   adults: 0,
   kids: 0,
   withDietaryNotes: 0,
-  mealCounts: {},
+  mealCounts: [],
 };
+
+const mealCountsValidator = v.array(
+  v.object({ meal: v.string(), count: v.number() })
+);
 
 const totalsValidator = v.object({
   responses: v.number(),
@@ -68,7 +80,7 @@ const totalsValidator = v.object({
   adults: v.number(),
   kids: v.number(),
   withDietaryNotes: v.number(),
-  mealCounts: v.record(v.string(), v.number()),
+  mealCounts: mealCountsValidator,
 });
 
 /** Just the fields that move the totals. */
@@ -77,9 +89,22 @@ type Counted = Pick<
   "attending" | "adults" | "kids" | "meal" | "dietaryNotes"
 >;
 
+/** Move one meal's tally by `delta`, adding or dropping the entry as needed. */
+function withMeal(counts: MealCount[], meal: string, delta: number): MealCount[] {
+  const seen = counts.some((entry) => entry.meal === meal);
+  const moved = seen
+    ? counts.map((entry) =>
+        entry.meal === meal ? { meal, count: entry.count + delta } : entry
+      )
+    : [...counts, { meal, count: delta }];
+
+  // Drop a meal nobody has left, so this stays as short as the menu.
+  return moved.filter((entry) => entry.count > 0);
+}
+
 /** Add (`sign` 1) or take back (`sign` -1) one row's contribution. */
-function applyRow(totals: Totals, row: Counted, sign: 1 | -1): Totals {
-  const next: Totals = { ...totals, mealCounts: { ...totals.mealCounts } };
+export function applyRow(totals: Totals, row: Counted, sign: 1 | -1): Totals {
+  const next: Totals = { ...totals };
 
   next.responses += sign;
   if (!row.attending) return next;
@@ -90,15 +115,15 @@ function applyRow(totals: Totals, row: Counted, sign: 1 | -1): Totals {
   if (row.dietaryNotes?.trim()) next.withDietaryNotes += sign;
 
   const meal = row.meal?.trim();
-  if (meal) {
-    // A party's meal choice covers its adults; kids are counted separately.
-    const count = (next.mealCounts[meal] ?? 0) + sign * row.adults;
-    // Drop a meal nobody has left, so the record stays as small as the menu.
-    if (count > 0) next.mealCounts[meal] = count;
-    else delete next.mealCounts[meal];
-  }
+  // A party's meal choice covers its adults; kids are counted separately.
+  if (meal) next.mealCounts = withMeal(next.mealCounts, meal, sign * row.adults);
 
   return next;
+}
+
+/** Starting totals, for a rebuild or a test. */
+export function zeroTotals(): Totals {
+  return { ...ZERO_TOTALS, mealCounts: [] };
 }
 
 async function totalsRow(ctx: MutationCtx) {
@@ -279,7 +304,7 @@ export const stats = query({
     kids: v.number(),
     totalGuests: v.number(),
     withDietaryNotes: v.number(),
-    mealCounts: v.record(v.string(), v.number()),
+    mealCounts: mealCountsValidator,
   }),
   handler: async (ctx, { key }) => {
     assertServer(key);
@@ -330,7 +355,7 @@ export const rebuildTotals = mutation({
       );
     }
 
-    let totals = ZERO_TOTALS;
+    let totals = zeroTotals();
     for (const row of rows) totals = applyRow(totals, row, 1);
 
     const existing = await totalsRow(ctx);

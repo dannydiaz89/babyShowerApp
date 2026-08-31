@@ -112,9 +112,14 @@ export default defineSchema({
     kids: v.number(),
     withDietaryNotes: v.number(),
 
-    // Meal name -> how many adults chose it. A meal drops out of the record
-    // once nobody has it, so this cannot grow past the options on offer.
-    mealCounts: v.record(v.string(), v.number()),
+    /*
+     * How many adults chose each meal. An array rather than a record keyed by
+     * meal name: Convex record keys must be ASCII, and the hosts write these
+     * labels themselves — "Niños" or "Entrée" would make every RSVP that
+     * selected them fail to save. An entry drops out once nobody has that
+     * meal, so this cannot grow past the options on offer.
+     */
+    mealCounts: v.array(v.object({ meal: v.string(), count: v.number() })),
   }).index("by_singleton", ["singleton"]),
 
   /**
