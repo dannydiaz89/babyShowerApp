@@ -187,7 +187,15 @@ Known limits, stated plainly:
 - Rate limiting is per IP address. It stops scripted guessing; it does not stop
   a determined attacker with many addresses. A strong admin password does.
 - Anyone with the admin password can export the entire guest list as a CSV.
-  Treat that file the way you'd treat the list itself.
+  Treat that file the way you'd treat the list itself. Guest-written cells that
+  start with `=`, `+`, `-` or `@` are prefixed so a spreadsheet reads them as
+  text rather than running them as a formula.
+- Server Actions are their own public endpoints — middleware does not run for
+  them — so each one checks the session itself rather than relying on the page
+  it belongs to being gated.
+- If the settings cannot be read, guest sign-in fails closed rather than
+  falling back to `SITE_PASSWORD`. An outage must not reinstate a password the
+  hosts have already rotated away from.
 
 ## Design system
 
@@ -245,23 +253,64 @@ RSVPs are keyed on email address. A guest who submits twice with the same
 address updates their answer instead of being counted twice. You can also
 delete any row from the dashboard.
 
-## Tests
+### How the dashboard counts
+
+The headline numbers come from a single `rsvpTotals` row that every write to
+`rsvps` updates in the same transaction, rather than from reading the table and
+adding it up — Convex has no count operator, and a whole-table read stops
+working once the table is large enough.
+
+Meal tallies are **one document per meal**, not a field on that row. Anything
+stored on the totals row is rewritten by every RSVP write, so it has to stay a
+fixed size for ever — a growing list of meals would eventually pass the
+document size limit and take every RSVP down with it. Capping the list instead
+only moved the failure somewhere quieter: a meal past the cap was simply
+missing from the catering numbers you order food against, with nothing on
+screen to say so. A document each has neither problem, and nothing turns a
+configured meal away.
+
+The RSVP action still refuses a meal that isn't on your menu — the form offers
+a `<select>`, but a Server Action is a public endpoint and the markup
+constrains nothing — so guests cannot invent meals. Meal labels are also never
+Convex record keys, because those must be ASCII and you name the options
+yourself; "Niños" or "Entrée" would otherwise make every RSVP choosing that
+option fail to save.
+
+The table reads 200 replies at a time and offers **Load more**, because the
+table is where you edit, merge and delete — the CSV is read-only, so it is not
+a substitute for a row you cannot see. Past 5,000 rows on one page it stops
+offering and points at the export instead. The export walks every page.
+
+An existing deployment, or one restored from a backup, has no totals row yet.
+The first dashboard visit builds it once (`rsvps.rebuildTotals`) and it stays
+current from then on; `pnpm seed` builds it too, so its summary is not zero on
+a fresh install.
+
+## Checks
 
 ```bash
+pnpm lint        # ESLint, configured in eslint.config.mjs
+pnpm typecheck
 pnpm test
+pnpm check:contrast
 ```
 
+### Tests
+
 Vitest, no browser. `tests/` mirrors the source tree, so a test's path says
-what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. See
-[tests/README.md](tests/README.md) for what is covered and why.
+what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. Most are
+pure functions; the Convex ones run the real mutations against a real database
+with `convex-test`. See [tests/README.md](tests/README.md) for what is covered
+and why.
 
 They target the places where a quiet bug costs something real: a guest cookie
 opening the admin dashboard, a guest counted twice, an allergy note lost in a
 merge, or half the family reading the wrong language. Every one of them was
 checked by deliberately breaking the code and confirming the suite goes red.
 
-CI runs types, tests, the WCAG contrast check and a production build on every
-push and pull request — see [.github/workflows/ci.yml](.github/workflows/ci.yml).
+CI runs lint, types, tests, the WCAG contrast check and a production build on
+every push and pull request — see
+[.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Using this for your own shower
 

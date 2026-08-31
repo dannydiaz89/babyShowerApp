@@ -40,6 +40,11 @@ const PAIRS = [
   ...["canvas", "surface", "surface-sunken", "danger-soft"].map((bg) => ["danger", bg, "error text", 4.5]),
   // WCAG 1.4.11: a field's edge is the only thing marking where it begins.
   ["border-field", "surface", "field boundary", 3],
+  // Registry swatches. The initial inside one is decorative, but the pair is
+  // a theme token like any other and should not drift below readable.
+  ["registry-clay-ink", "registry-clay", "registry swatch, clay", 4.5],
+  ["gold-ink", "registry-amber", "registry swatch, amber", 4.5],
+  ["registry-sky-ink", "registry-sky", "registry swatch, sky", 4.5],
 ];
 
 let failures = 0;

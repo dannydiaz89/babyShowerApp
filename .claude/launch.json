@@ -4,8 +4,21 @@
     {
       "name": "baby-shower",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3001,
+      "autoPort": false
+    },
+    {
+      "name": "baby-shower-scratch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "run",
+        "dev:scratch"
+      ],
+      "port": 3099,
       "autoPort": false
     }
   ]

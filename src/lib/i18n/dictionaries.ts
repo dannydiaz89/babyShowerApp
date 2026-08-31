@@ -18,6 +18,8 @@ export const en = {
     lockedOut: "Too many attempts. Please try again in {minutes} minutes.",
     limiterUnavailable:
       "Sign-in is temporarily unavailable because the database can't be reached. Admin sign-in stays closed until it is back.",
+    unavailable:
+      "We can't check the password right now because the database can't be reached. Please try again in a few minutes.",
     lostPassword: "Lost the password? Text {name} or email {email}.",
     lostPasswordNameOnly: "Lost the password? Text {name}.",
     lostPasswordEmailOnly: "Lost the password? Email {email}.",
@@ -93,8 +95,11 @@ export const en = {
       "Please give us an email or a phone number so we can reach you.",
     errPhoneInvalid: "That doesn't look like a phone number.",
     errEmailInvalid: "That doesn't look like an email address.",
+    errMealInvalid: "Please choose one of the meal options listed.",
     errAdults: "There should be at least one adult in your party.",
     errSaving: "Something went wrong saving your RSVP. Please try again in a moment.",
+    errSignedOut:
+      "Your session has expired. Please enter the password from your invitation again, then resend this form.",
 
     successAttending: "Wonderful — you're on the list.",
     successDeclined: "Thank you for letting us know.",
@@ -140,11 +145,16 @@ export const en = {
     totalReplies: "total replies",
     catering: "Catering",
     allergyNote: "{count} with allergy notes — check the table",
+    mealsPartial: "Only the first meals are shown here. The CSV has every reply's choice.",
 
     downloadCsv: "Download CSV",
     viewSite: "View site",
     settings: "Settings",
     noRsvps: "No RSVPs yet. They'll appear here as guests respond.",
+    showingRecent: "Showing the {count} most recent replies of {total}.",
+    loadMore: "Load more",
+    tableCapped:
+      "Showing the {count} most recent replies of {total} — as many as this page can hold. Download the CSV for the rest.",
 
     colGuest: "Guest",
     colReply: "Reply",
@@ -259,6 +269,8 @@ export const en = {
     hoursColumn: "Hour",
     minutesColumn: "Minute",
     meridiemColumn: "AM or PM",
+    dateInput: "Date",
+    timeInput: "Time",
     contactName: "Contact name",
     contactEmail: "Contact email",
     giftShipping: "Gift shipping address",
@@ -287,6 +299,10 @@ export const en = {
     mealOptions: "Meal options",
     addMealOption: "Add an option",
     removeMealOption: "Remove this option",
+    tooManyMealOptions:
+      "That is {count} meal labels across the two languages, and the catering breakdown can only tally {max}. Please remove some options.",
+    mealOptionTooLong:
+      "One meal option is too long to appear in the catering breakdown. Keep each label under {max} characters.",
 
     guestPassword: "New guest password",
     guestPasswordHint:
@@ -323,6 +339,8 @@ export const es: Dictionary = {
     lockedOut: "Demasiados intentos. Inténtenlo de nuevo en {minutes} minutos.",
     limiterUnavailable:
       "El inicio de sesión no está disponible porque no se puede conectar con la base de datos. El acceso de anfitrión permanece cerrado hasta que vuelva.",
+    unavailable:
+      "No podemos verificar la contraseña en este momento porque no se puede conectar con la base de datos. Inténtenlo de nuevo en unos minutos.",
     lostPassword: "¿Perdieron la contraseña? Escriban a {name} o al correo {email}.",
     lostPasswordNameOnly: "¿Perdieron la contraseña? Escriban a {name}.",
     lostPasswordEmailOnly: "¿Perdieron la contraseña? Escriban al correo {email}.",
@@ -398,8 +416,11 @@ export const es: Dictionary = {
       "Por favor déjennos un correo o un teléfono para poder comunicarnos.",
     errPhoneInvalid: "Eso no parece un número de teléfono.",
     errEmailInvalid: "Eso no parece un correo electrónico.",
+    errMealInvalid: "Por favor elijan una de las opciones de comida de la lista.",
     errAdults: "Debe haber al menos un adulto en su grupo.",
     errSaving: "Algo salió mal al guardar su confirmación. Inténtenlo de nuevo en un momento.",
+    errSignedOut:
+      "Su sesión expiró. Vuelvan a escribir la contraseña de su invitación y envíen este formulario otra vez.",
 
     successAttending: "¡Qué gusto! Ya están en la lista.",
     successDeclined: "Gracias por avisarnos.",
@@ -445,11 +466,17 @@ export const es: Dictionary = {
     totalReplies: "respuestas en total",
     catering: "Comida",
     allergyNote: "{count} con notas de alergias — revisen la tabla",
+    mealsPartial:
+      "Aquí solo se muestran las primeras comidas. El CSV incluye la elección de cada respuesta.",
 
     downloadCsv: "Descargar CSV",
     viewSite: "Ver el sitio",
     settings: "Configuración",
     noRsvps: "Aún no hay confirmaciones. Aparecerán aquí conforme respondan.",
+    showingRecent: "Mostrando las {count} respuestas más recientes de {total}.",
+    loadMore: "Mostrar más",
+    tableCapped:
+      "Mostrando las {count} respuestas más recientes de {total}, el máximo que cabe en esta página. Descarguen el CSV para ver el resto.",
 
     colGuest: "Invitado",
     colReply: "Respuesta",
@@ -562,6 +589,8 @@ export const es: Dictionary = {
     hoursColumn: "Hora",
     minutesColumn: "Minutos",
     meridiemColumn: "AM o PM",
+    dateInput: "Fecha",
+    timeInput: "Hora",
     contactName: "Nombre de contacto",
     contactEmail: "Correo de contacto",
     giftShipping: "Dirección para enviar regalos",
@@ -590,6 +619,10 @@ export const es: Dictionary = {
     mealOptions: "Opciones de comida",
     addMealOption: "Agregar una opción",
     removeMealOption: "Eliminar esta opción",
+    tooManyMealOptions:
+      "Son {count} etiquetas de comida entre los dos idiomas, y el resumen de catering solo puede contar {max}. Por favor quiten algunas opciones.",
+    mealOptionTooLong:
+      "Una opción de comida es demasiado larga para aparecer en el resumen de catering. Usen menos de {max} caracteres por etiqueta.",
 
     guestPassword: "Nueva contraseña de invitados",
     guestPasswordHint:

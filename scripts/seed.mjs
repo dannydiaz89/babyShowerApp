@@ -161,7 +161,22 @@ const client = new ConvexHttpClient(env.CONVEX_URL);
 const key = env.ADMIN_API_KEY;
 const clearing = process.argv.includes("--clear");
 
-const existing = await client.query("rsvps:list", { key });
+/** Every stored RSVP, a page at a time — the query is paginated. */
+async function readAll() {
+  const rows = [];
+  let cursor = null;
+  for (;;) {
+    const page = await client.query("rsvps:page", {
+      key,
+      paginationOpts: { numItems: 500, cursor },
+    });
+    rows.push(...page.page);
+    if (page.isDone) return rows;
+    cursor = page.continueCursor;
+  }
+}
+
+const existing = await readAll();
 const samples = existing.filter(isSample);
 const real = existing.length - samples.length;
 
@@ -186,6 +201,13 @@ if (clearing) {
   console.log("  · Elena & Hector Vargas — she booked for both, he booked again");
 }
 
+/*
+ * Build the totals before reading them. They are a stored row that each write
+ * keeps current, and a fresh deployment has no such row yet — writes made
+ * before it exists are deliberately not counted, because a later rebuild will
+ * count them. Without this the summary below reports zero on a new install.
+ */
+await client.mutation("rsvps:rebuildTotals", { key });
 const stats = await client.query("rsvps:stats", { key });
 console.log(
   `\nNow: ${stats.responses} responses, ${stats.totalGuests} guests ` +

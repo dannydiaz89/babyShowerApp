@@ -8,6 +8,16 @@ export type StoredSettings = Settings & {
   guestPasswordHash?: string;
   /** False when nothing has been saved and the site is showing defaults. */
   isConfigured: boolean;
+  /**
+   * False when Convex could not be reached, so what is stored is unknown.
+   *
+   * The difference matters: `isConfigured: false` means "the hosts have saved
+   * nothing", while `available: false` means "we cannot tell". Anything that
+   * decides access must fail closed on the second — treating an outage as
+   * "no stored password" would quietly re-enable whichever password the
+   * environment still holds, including one the hosts already rotated away.
+   */
+  available: boolean;
 };
 
 /**
@@ -17,7 +27,7 @@ export type StoredSettings = Settings & {
 export async function getSettings(): Promise<StoredSettings> {
   try {
     const row = await convexClient().query(api.settings.get, { key: convexKey() });
-    if (!row) return { ...DEFAULT_SETTINGS, isConfigured: false };
+    if (!row) return { ...DEFAULT_SETTINGS, isConfigured: false, available: true };
 
     /*
      * Pick fields by name rather than spreading the row. Convex bookkeeping
@@ -36,10 +46,12 @@ export async function getSettings(): Promise<StoredSettings> {
       ...settings,
       guestPasswordHash: row.guestPasswordHash,
       isConfigured: true,
+      available: true,
     };
-  } catch {
-    // Convex not reachable yet (fresh clone, missing env). Show the defaults
-    // rather than a crash; the dashboard explains what to configure.
-    return { ...DEFAULT_SETTINGS, isConfigured: false };
+  } catch (error) {
+    // Convex not reachable yet (fresh clone, missing env) or down. Show the
+    // defaults rather than a crash; the dashboard explains what to configure.
+    console.error("Loading settings failed", error);
+    return { ...DEFAULT_SETTINGS, isConfigured: false, available: false };
   }
 }

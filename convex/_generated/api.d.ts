@@ -9,6 +9,7 @@
  */
 
 import type * as guard from "../guard.js";
+import type * as limits from "../limits.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as rsvps from "../rsvps.js";
 import type * as settings from "../settings.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   guard: typeof guard;
+  limits: typeof limits;
   rateLimit: typeof rateLimit;
   rsvps: typeof rsvps;
   settings: typeof settings;

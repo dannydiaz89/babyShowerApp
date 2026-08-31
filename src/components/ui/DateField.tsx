@@ -3,81 +3,15 @@
 import { useMemo, useRef, useState } from "react";
 import { Popover, useAnchoredPanel } from "./Popover";
 import { Input } from "./Input";
-
-/*
- * Dates are handled as plain Y-M-D parts, never as a Date built from a string.
- * `new Date("2026-11-07")` parses as UTC and can land on the previous day west
- * of Greenwich — the kind of bug that silently moves an event by a day.
- */
-type Parts = { year: number; month: number; day: number };
-
-function toISO({ year, month, day }: Parts): string {
-  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function fromISO(value: string): Parts | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  return { year: +match[1], month: +match[2] - 1, day: +match[3] };
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-}
-
-function firstWeekday(year: number, month: number) {
-  return new Date(Date.UTC(year, month, 1)).getUTCDay();
-}
-
-/** Does this locale write the day before the month? */
-function dayComesFirst(locale: string) {
-  const order = new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "UTC",
-  })
-    .formatToParts(Date.UTC(2021, 4, 17))
-    .filter((part) => part.type === "day" || part.type === "month")
-    .map((part) => part.type);
-  return order[0] === "day";
-}
-
-/**
- * Read what the host typed. Accepts the locale's own order (11/07/2026 in the
- * US, 07/11/2026 in Mexico), any of / - . as separators, and plain ISO.
- * Returns null when it isn't a real date, so 31/02 is rejected rather than
- * quietly rolling into March.
- */
-function parseTyped(text: string, locale: string): Parts | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-
-  const iso = fromISO(trimmed);
-  if (iso) return iso;
-
-  const numbers = trimmed.split(/[/\-.\s]+/).filter(Boolean).map(Number);
-  if (numbers.length !== 3 || numbers.some(Number.isNaN)) return null;
-
-  const [a, b, rawYear] = numbers;
-  const [day, month] = dayComesFirst(locale) ? [a, b] : [b, a];
-  const year = rawYear < 100 ? 2000 + rawYear : rawYear;
-
-  if (month < 1 || month > 12 || day < 1) return null;
-  if (day > daysInMonth(year, month - 1)) return null;
-
-  return { year, month: month - 1, day };
-}
-
-function formatParts(parts: Parts | null, locale: string): string {
-  if (!parts) return "";
-  return new Intl.DateTimeFormat(locale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone: "UTC",
-  }).format(Date.UTC(parts.year, parts.month, parts.day));
-}
+import {
+  type DateParts,
+  daysInMonth,
+  firstWeekday,
+  formatParts,
+  fromISO,
+  parseTyped,
+  toISO,
+} from "@/lib/date-parts";
 
 /** Names come from fixed UTC dates, so server and client always agree. */
 function useCalendarNames(locale: string) {
@@ -118,6 +52,7 @@ export function DateField({
   onChange,
   locale,
   labels,
+  ariaLabel,
 }: {
   id: string;
   name: string;
@@ -125,6 +60,11 @@ export function DateField({
   onChange: (next: string) => void;
   locale: string;
   labels: DateFieldLabels;
+  /**
+   * Names the input when no <label> points at it — a date paired with a time
+   * under one legend, where the legend alone would leave both unnamed.
+   */
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pickingMonth, setPickingMonth] = useState(false);
@@ -146,13 +86,13 @@ export function DateField({
   // than silently saving something wrong.
   const typedIsBroken = text.trim() !== "" && parseTyped(text, locale) === null;
 
-  function commit(parts: Parts | null) {
+  function commit(parts: DateParts | null) {
     onChange(parts ? toISO(parts) : "");
     setText(formatParts(parts, locale));
     if (parts) setView({ year: parts.year, month: parts.month });
   }
 
-  function choose(parts: Parts) {
+  function choose(parts: DateParts) {
     commit(parts);
     setOpen(false);
   }
@@ -188,6 +128,7 @@ export function DateField({
             }
           }}
           onBlur={() => setText(formatParts(parseTyped(text, locale), locale))}
+          aria-label={ariaLabel}
           aria-invalid={typedIsBroken || undefined}
           inputMode="numeric"
           autoComplete="off"
