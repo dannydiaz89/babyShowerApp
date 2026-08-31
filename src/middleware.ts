@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
+import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
 
 /** Everything a guest needs the password to reach. */
 const GUEST_PATHS = ["/invitation", "/rsvp", "/registry"];
@@ -7,16 +8,37 @@ const GUEST_PATHS = ["/invitation", "/rsvp", "/registry"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const nonce = cspNonce();
+  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development");
+
+  /*
+   * The policy travels inbound as well as back out. Next.js reads the nonce off
+   * the *request* header (app-render looks for 'nonce-…' in script-src) and
+   * stamps it on the scripts it inlines; without this the browser would be sent
+   * a nonce that matches nothing and the page would load no JavaScript at all.
+   * x-nonce is there for any component that later needs to inline its own.
+   */
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("content-security-policy", csp);
+  requestHeaders.set("x-nonce", nonce);
+
+  /** Every exit below goes through here, so no response can ship without the policy. */
+  const send = (response: NextResponse) => {
+    response.headers.set("Content-Security-Policy", csp);
+    return response;
+  };
+  const proceed = () => send(NextResponse.next({ request: { headers: requestHeaders } }));
+
   const adminToken = request.cookies.get(ADMIN_COOKIE)?.value;
 
   if (pathname.startsWith("/admin")) {
     // /admin itself is the host sign-in screen; the rest of /admin is gated.
-    if (pathname === "/admin") return NextResponse.next();
+    if (pathname === "/admin") return proceed();
 
     if (!(await verifyToken(adminToken, "admin"))) {
-      return NextResponse.redirect(new URL("/admin", request.url));
+      return send(NextResponse.redirect(new URL("/admin", request.url)));
     }
-    return NextResponse.next();
+    return proceed();
   }
 
   if (GUEST_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
@@ -31,13 +53,30 @@ export async function middleware(request: NextRequest) {
       const url = new URL("/", request.url);
       // Send them where they were headed once they enter the password.
       url.searchParams.set("next", pathname);
-      return NextResponse.redirect(url);
+      return send(NextResponse.redirect(url));
     }
   }
 
-  return NextResponse.next();
+  return proceed();
 }
 
 export const config = {
-  matcher: ["/invitation/:path*", "/rsvp/:path*", "/registry/:path*", "/admin/:path*"],
+  /*
+   * Everything except the build's own static output.
+   *
+   * The auth rules above still only act on /admin and the three guest paths,
+   * but the CSP has to reach every document — including the gate at "/", which
+   * the previous matcher did not cover and which is the one page a logged-out
+   * visitor ever sees.
+   *
+   * Prefetches are deliberately NOT excluded here. next/link prefetches
+   * /invitation and friends from the header nav, and those responses carry the
+   * page's rendered content; skipping the middleware for them would hand the
+   * guest pages to anyone who never entered the password.
+   *
+   * _next/static and _next/image are immutable asset responses. A policy on
+   * them governs nothing — it is the document's CSP that decides what a page is
+   * allowed to load.
+   */
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };
