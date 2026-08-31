@@ -245,6 +245,24 @@ RSVPs are keyed on email address. A guest who submits twice with the same
 address updates their answer instead of being counted twice. You can also
 delete any row from the dashboard.
 
+## Tests
+
+```bash
+pnpm test
+```
+
+Vitest, no browser. `tests/` mirrors the source tree, so a test's path says
+what it covers — `tests/lib/auth.test.ts` covers `src/lib/auth.ts`. See
+[tests/README.md](tests/README.md) for what is covered and why.
+
+They target the places where a quiet bug costs something real: a guest cookie
+opening the admin dashboard, a guest counted twice, an allergy note lost in a
+merge, or half the family reading the wrong language. Every one of them was
+checked by deliberately breaking the code and confirming the suite goes red.
+
+CI runs types, tests, the WCAG contrast check and a production build on every
+push and pull request — see [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
 ## Using this for your own shower
 
 Fork it. `src/lib/defaults.ts` is the only file you need to touch — it holds

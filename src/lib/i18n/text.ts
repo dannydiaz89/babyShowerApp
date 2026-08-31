@@ -4,9 +4,9 @@
  * ./index.ts, which re-exports everything here for server callers.
  */
 import type { Localized } from "@/lib/defaults";
-import { LOCALES } from "./locales";
+import type { Locale } from "./locales";
 
-export type Locale = (typeof LOCALES)[number];
+export type { Locale };
 
 /** Fill {placeholders} in a dictionary string. */
 export function fill(

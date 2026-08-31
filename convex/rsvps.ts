@@ -16,7 +16,7 @@ const rsvpFields = {
 };
 
 /** Lowercased, so casing never splits one guest into two rows. */
-function toEmailKey(email: string | undefined): string | undefined {
+export function toEmailKey(email: string | undefined): string | undefined {
   const value = email?.trim().toLowerCase();
   return value ? value : undefined;
 }
@@ -26,7 +26,7 @@ function toEmailKey(email: string | undefined): string | undefined {
  * Long-distance and country prefixes are dropped to the last ten digits, which
  * is what people actually vary between submissions.
  */
-function toPhoneKey(phone: string | undefined): string | undefined {
+export function toPhoneKey(phone: string | undefined): string | undefined {
   const digits = (phone ?? "").replace(/\D/g, "");
   if (digits.length < 7) return undefined;
   return digits.length > 10 ? digits.slice(-10) : digits;

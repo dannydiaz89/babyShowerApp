@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first — no point finishing a
+# run for a commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the pnpm version from the packageManager field in package.json,
+      # so CI and local development cannot drift apart.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Colour contrast (WCAG AA)
+        run: pnpm check:contrast
+
+      - name: Build
+        # Placeholders only. Every page is server-rendered on demand, so the
+        # build never reaches Convex — it just needs the variables to exist.
+        # Real values live in Vercel and must never appear here.
+        env:
+          AUTH_SECRET: ci-placeholder-not-a-real-secret
+          ADMIN_PASSWORD: ci-placeholder-not-a-real-secret
+          ADMIN_API_KEY: ci-placeholder-not-a-real-secret
+          CONVEX_URL: https://example.convex.cloud
+        run: pnpm build
