@@ -5,6 +5,7 @@ import { signOut } from "@/app/actions";
 import { AdminHeader } from "@/components/SiteHeader";
 import { RsvpTable } from "@/components/RsvpTable";
 import {
+  Alert,
   AnchorButton,
   Button,
   ButtonLink,
@@ -18,6 +19,7 @@ import { convexClient, convexKey } from "@/lib/convex";
 import { collectPages, requestedRows } from "@/lib/paging";
 import { getTranslation, fill, pick, formatDate } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
+import { wallState } from "@/lib/photos";
 import type { Dictionary } from "@/lib/i18n";
 
 // RSVPs change while the page is open; never serve this from a cache.
@@ -163,6 +165,9 @@ export default async function DashboardPage({
         ? fill(t.admin.edited, { date: short(rsvp.updatedAt) })
         : null,
   }));
+  // Hosts look at this page most; a paused photo wall gets one line here.
+  const photoPause = (await wallState().catch(() => null))?.paused ?? null;
+
   return (
     <>
       <AdminHeader
@@ -173,6 +178,15 @@ export default async function DashboardPage({
       />
 
       <main id="main" className="mx-auto max-w-6xl px-5 pb-20 pt-10">
+        {photoPause ? (
+          <Alert tone="critical" role="alert" className="mb-6">
+            {t.photos.pausedNoticeHost}{" "}
+            <a href="/admin/settings?tab=photos" className="underline underline-offset-4">
+              {t.photos.goToSettings}
+            </a>
+          </Alert>
+        ) : null}
+
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <Eyebrow>{formatDate(settings.startISO, locale)}</Eyebrow>

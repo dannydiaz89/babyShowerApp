@@ -1,0 +1,152 @@
+/**
+ * Turning a picked photo into what the wall needs, on the guest's phone.
+ *
+ * Two outputs per photo: a web copy the wall shows and a small thumbnail for
+ * the upload screen. Both are made from the file the browser already has,
+ * so they appear before a single byte is sent. The original is untouched.
+ *
+ * The arithmetic is separated from the browser calls so it can be tested;
+ * everything that needs a canvas is kept thin.
+ */
+import { PHOTO_WEB_MAX_BYTES, PHOTO_WEB_MAX_EDGE_SITE } from "../../convex/limits";
+
+export type Size = { width: number; height: number };
+
+/**
+ * Scale a size down so its longer edge is at most `maxEdge`, keeping the
+ * proportions. Never scales up: a small photo stays its own size.
+ */
+export function fitWithin({ width, height }: Size, maxEdge: number): Size {
+  if (width <= 0 || height <= 0) return { width: 0, height: 0 };
+  const longest = Math.max(width, height);
+  if (longest <= maxEdge) return { width: Math.round(width), height: Math.round(height) };
+  const scale = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+export type PreparedImage = {
+  /** What the wall shows. WebP where the browser can make one, else JPEG. */
+  web: Blob;
+  width: number;
+  height: number;
+  /** A small square-ish preview for the upload screen. */
+  thumb: Blob;
+};
+
+const THUMB_EDGE = 320;
+const WEB_QUALITY = 0.82;
+const THUMB_QUALITY = 0.7;
+
+/** Something the browser could not decode — HEIC on Android, a corrupt file. */
+export class UnreadableImageError extends Error {
+  constructor() {
+    super("The browser could not read this image.");
+    this.name = "UnreadableImageError";
+  }
+}
+
+/**
+ * Load through an <img>, not createImageBitmap: the element path honours
+ * EXIF orientation everywhere that matters, so a photo taken sideways is not
+ * laid out sideways.
+ *
+ * Waits on `load`, not `img.decode()`. Browsers put off decoding for a
+ * document that is not visible, and a guest who switches apps mid-pick would
+ * come back to thumbnails that never appeared. Drawing to the canvas below
+ * decodes the pixels whether or not the tab is showing.
+ */
+function load(file: File): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(file);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const finish = (ok: boolean) => {
+      // The pixels live on in the element; the URL can go as soon as it has loaded.
+      URL.revokeObjectURL(url);
+      if (ok && img.naturalWidth > 0) resolve(img);
+      else reject(new UnreadableImageError());
+    };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
+    img.src = url;
+  });
+}
+
+function draw(source: CanvasImageSource, size: Size): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new UnreadableImageError();
+  ctx.drawImage(source, 0, 0, size.width, size.height);
+  return canvas;
+}
+
+/**
+ * Ask for WebP and check what came back: a browser that cannot encode it
+ * hands over PNG instead, which would be several times larger than the JPEG
+ * it should have been.
+ */
+function encode(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (webp) => {
+        if (webp && webp.type === "image/webp") return resolve(webp);
+        canvas.toBlob(
+          (jpeg) => (jpeg ? resolve(jpeg) : reject(new UnreadableImageError())),
+          "image/jpeg",
+          quality
+        );
+      },
+      "image/webp",
+      quality
+    );
+  });
+}
+
+/**
+ * The steps taken when a first encode comes out over the server's limit:
+ * quality first, since that costs least visually, then a smaller edge. A
+ * busy, high-detail photo can encode to several megabytes at the default
+ * quality, and a copy the server refuses would fail on every retry.
+ */
+const SHRINK_STEPS: { quality: number; scale: number }[] = [
+  { quality: 0.82, scale: 1 },
+  { quality: 0.7, scale: 1 },
+  { quality: 0.6, scale: 1 },
+  { quality: 0.6, scale: 0.8 },
+  { quality: 0.55, scale: 0.65 },
+  { quality: 0.5, scale: 0.5 },
+];
+
+export async function prepareImage(
+  file: File,
+  maxEdge: number = PHOTO_WEB_MAX_EDGE_SITE,
+  maxBytes: number = PHOTO_WEB_MAX_BYTES
+): Promise<PreparedImage> {
+  const img = await load(file);
+  const natural = { width: img.naturalWidth, height: img.naturalHeight };
+
+  let webSize = fitWithin(natural, maxEdge);
+  let webCanvas = draw(img, webSize);
+  let web = await encode(webCanvas, WEB_QUALITY);
+
+  for (const step of SHRINK_STEPS) {
+    if (web.size <= maxBytes) break;
+    if (step.scale !== 1) {
+      webSize = fitWithin(natural, Math.round(maxEdge * step.scale));
+      webCanvas = draw(img, webSize);
+    }
+    web = await encode(webCanvas, step.quality);
+  }
+  if (web.size > maxBytes) throw new UnreadableImageError();
+
+  // The thumbnail comes from the web copy, not the original: far fewer
+  // pixels to push through the canvas a second time.
+  const thumbCanvas = draw(webCanvas, fitWithin(webSize, THUMB_EDGE));
+  const thumb = await encode(thumbCanvas, THUMB_QUALITY);
+
+  return { web, width: webSize.width, height: webSize.height, thumb };
+}

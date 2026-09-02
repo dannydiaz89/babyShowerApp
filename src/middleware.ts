@@ -1,15 +1,62 @@
+import { ConvexHttpClient } from "convex/browser";
 import { NextResponse, type NextRequest } from "next/server";
+import { api } from "../convex/_generated/api";
 import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
+import {
+  UPLOADER_COOKIE,
+  mintUploaderCookie,
+  readUploaderCookie,
+  uploaderCookieOptions,
+} from "@/lib/photo-device";
 
 /** Everything a guest needs the password to reach. */
-const GUEST_PATHS = ["/invitation", "/rsvp", "/registry"];
+const GUEST_PATHS = ["/invitation", "/rsvp", "/registry", "/photos"];
+
+/**
+ * Photo web copies are served from Convex storage, which lives at the
+ * deployment URL; originals go from the phone straight to Google Drive.
+ * Both origins are named here so the policy can stay strict everywhere else.
+ */
+const DRIVE_UPLOAD_ORIGIN = "https://www.googleapis.com";
+
+/**
+ * New device cookies per address per hour. Mirrors PHOTO_RATE.mintsPerAddress
+ * in lib/photo-routes.ts, which the routes apply to their own fallback mint;
+ * that module imports next/headers and cannot run here on the Edge.
+ */
+const MINTS_PER_ADDRESS = 400;
+
+/** Whether this address may be issued another device cookie. Fails open. */
+async function mintAllowed(request: NextRequest): Promise<boolean> {
+  const url = process.env.CONVEX_URL;
+  const key = process.env.ADMIN_API_KEY;
+  if (!url || !key) return true;
+  const address =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  try {
+    const result = await new ConvexHttpClient(url).mutation(api.rateLimit.consume, {
+      key,
+      id: `photos:mint:ip:${address}`,
+      limit: MINTS_PER_ADDRESS,
+      windowMs: 60 * 60 * 1000,
+    });
+    return result.allowed;
+  } catch {
+    return true;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const nonce = cspNonce();
-  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development");
+  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development", {
+    imageOrigins: process.env.CONVEX_URL ? [process.env.CONVEX_URL] : [],
+    connectOrigins: [DRIVE_UPLOAD_ORIGIN],
+  });
 
   /*
    * The policy travels inbound as well as back out. Next.js reads the nonce off
@@ -27,7 +74,25 @@ export async function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
     return response;
   };
-  const proceed = () => send(NextResponse.next({ request: { headers: requestHeaders } }));
+  const proceed = async () => {
+    const response = send(NextResponse.next({ request: { headers: requestHeaders } }));
+    /*
+     * The photo pages get their device cookie here, on the page load, not on
+     * the first upload. An upload batch opens three sessions at once, and if
+     * none of them had a cookie yet each would mint its own — three ids for
+     * one phone, and two thirds of its photos not "yours". The routes still
+     * mint one if it is missing, as a fallback; this just makes sure it is not.
+     * A cookie that does not carry a valid signature counts as missing.
+     */
+    if (
+      pathname.startsWith("/photos") &&
+      !(await readUploaderCookie(request.cookies.get(UPLOADER_COOKIE)?.value)) &&
+      (await mintAllowed(request))
+    ) {
+      response.cookies.set(UPLOADER_COOKIE, await mintUploaderCookie(), uploaderCookieOptions());
+    }
+    return response;
+  };
 
   const adminToken = request.cookies.get(ADMIN_COOKIE)?.value;
 

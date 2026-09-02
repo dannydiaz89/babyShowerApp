@@ -3,18 +3,22 @@ import { RsvpForm } from "@/components/RsvpForm";
 import { Eyebrow, PageTitle } from "@/components/ui";
 import { getTranslation, fill, pick, formatDate, formatDateShort } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
-import { isAdminSession } from "@/lib/session";
+import { wallState } from "@/lib/photos";
+import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
 export default async function RsvpPage() {
-  const [{ locale, t }, settings, previewing] = await Promise.all([
+  await requireGuestAccess("/rsvp");
+
+  const [{ locale, t }, settings, previewing, wall] = await Promise.all([
     getTranslation(),
     getSettings(),
     isAdminSession(),
+    wallState(),
   ]);
 
   return (
     <>
-      <GuestHeader current="/rsvp" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} />
+      <GuestHeader current="/rsvp" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} photos={wall.visible} />
 
       <main id="main" className="mx-auto max-w-2xl px-5 pb-20 pt-12">
         <div className="mb-8 text-center">

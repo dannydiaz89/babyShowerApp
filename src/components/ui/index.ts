@@ -6,7 +6,18 @@
  * raw color, radius, or shadow classes of their own.
  */
 export { Button, ButtonLink, AnchorButton, IconButton, buttonClass } from "./Button";
-export { TrashIcon, PencilIcon, CloseIcon, MoreIcon } from "./Icon";
+export {
+  TrashIcon,
+  PencilIcon,
+  CloseIcon,
+  MoreIcon,
+  CameraIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CheckIcon,
+  PlusIcon,
+  PhotoIcon,
+} from "./Icon";
 export { RowMenu, type RowMenuItem } from "./RowMenu";
 export { Popover, useAnchoredPanel } from "./Popover";
 export { DateField, type DateFieldLabels } from "./DateField";
@@ -15,7 +26,8 @@ export { DateTimeField } from "./DateTimeField";
 export { Modal } from "./Modal";
 export { Card, cardClass, Label, FieldsetLabel, Overline, Hint, Eyebrow, OrnamentRule } from "./Surface";
 export { Input, Textarea, Select, Checkbox, FieldError } from "./Input";
-export { Alert, Badge } from "./Feedback";
+export { Alert, Badge, Callout } from "./Feedback";
+export { ProgressBar } from "./ProgressBar";
 export { NavLink, SegmentedControl, Segment, TabList, Tab } from "./Navigation";
 export { PageTitle, SectionTitle, DisplayTitle } from "./Typography";
 export { StatGroup, type StatItem } from "./Stat";

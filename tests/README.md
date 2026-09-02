@@ -9,6 +9,12 @@ covers and where a new one belongs:
 | `src/lib/i18n/text.ts` | `tests/lib/i18n/text.test.ts` |
 | `convex/rsvps.ts` | `tests/convex/rsvps.test.ts`, `tests/convex/totals.test.ts`, `tests/convex/rebuild.test.ts` |
 | `src/app/rsvp/actions.ts` | `tests/app/rsvp-actions.test.ts` |
+| `convex/photos.ts`, `convex/drive.ts` | `tests/convex/photos.test.ts` |
+| `src/app/api/photos/**` | `tests/app/photos-api.test.ts` |
+| `src/lib/photo-wall.ts` | `tests/lib/photo-wall.test.ts` |
+| `src/lib/justified.ts` | `tests/lib/justified.test.ts` |
+| `src/lib/seal.ts` | `tests/lib/seal.test.ts` |
+| `src/lib/photo-device.ts` | `tests/lib/photo-device.test.ts` |
 
 ```bash
 pnpm test        # once
@@ -69,6 +75,32 @@ the family reads the wrong language.
   meals settings had accepted, then aligning the two limits still let labels
   from an older menu crowd out a new option.
 
+- **`convex/photos` against a database** — who may hide what, and that the
+  counters and the stored files stay in step with the rows. The uploader's
+  device id must never appear in a wall page; a non-owner's hide must change
+  nothing; a delete must take the web copy with it in the same transaction.
+  One of these caught a real Convex rule: a mutation that throws rolls back
+  its own storage delete, so a refused oversize copy stayed in storage until
+  the refusal became a return value.
+- **`api/photos` routes** — each Route Handler is a public endpoint outside
+  the middleware gate, exactly like a Server Action. That no session gets
+  nothing; that a guest cannot reach restore or delete; that a guest with no
+  device cookie is refused before the database is asked; that a claimed Drive
+  file id is checked against the folder before it is recorded; and that
+  uploads close with the wall.
+- **`lib/photo-wall`** — the wall opens by the event's calendar date where
+  the shower is, not in UTC. Checked at 05:30 UTC on the event date, which is
+  still the evening before in Los Angeles.
+- **`lib/justified`** — the arithmetic behind the wall's rows: a full row
+  spans the container to the pixel, photos keep their proportions, and a
+  short last row is never stretched to fit.
+- **`lib/seal`** — the Drive refresh token cannot be read back without the
+  secret, and an altered value is refused rather than decrypted wrong.
+- **`lib/csp`** — the two added origins land in the two right directives and
+  nowhere else, and a malformed origin value cannot widen the policy.
+- **`lib/image-prep`** — the resize arithmetic. The canvas half needs a
+  browser and is kept thin.
+
 ## Two things worth knowing
 
 **The timezone is pinned to `America/Los_Angeles`** in `vitest.config.mts`,
@@ -96,8 +128,9 @@ involves reading or writing documents rather than computing a value.
 
 ## What is not covered
 
-No component or browser tests — so the unsaved-changes navigation guard and
-the date/time field labelling are verified by hand, not here. The UI was
+No component or browser tests — so the unsaved-changes navigation guard, the
+date/time field labelling, the photo wall's layout in a real viewport and the
+upload flow's canvas work are verified by hand, not here. The UI was
 verified against a running server, and the pieces most likely to break
 silently are the pure functions above. Adding React Testing Library later
 would be reasonable; it is not pretending to be here now.

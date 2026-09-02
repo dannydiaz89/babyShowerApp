@@ -6,8 +6,10 @@ import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
 import { hashPassword } from "@/lib/password";
+import { getSettings } from "@/lib/settings";
 import { fill, getTranslation } from "@/lib/i18n";
 import { checkMealOptions } from "@/lib/meals";
+import { defaultClosesISO } from "@/lib/photo-wall";
 import {
   SETTINGS_TABS,
   type SettingsState,
@@ -15,8 +17,13 @@ import {
 } from "@/lib/settings-tabs";
 import {
   DEFAULT_SETTINGS,
+  isTimeZone,
+  PHOTO_STORAGE_OPTIONS,
+  PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
   type Localized,
+  type PhotoStorage,
+  type PhotoWallMode,
   type Settings,
 } from "@/lib/defaults";
 
@@ -76,7 +83,7 @@ function readMealOptions(form: FormData): Localized[] {
 }
 
 /** Only the fields the given tab owns. Everything else keeps its stored value. */
-function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
+function fieldsForTab(tab: SettingsTab, form: FormData, stored: Settings): Partial<Settings> {
   switch (tab) {
     case "event":
       return {
@@ -88,6 +95,7 @@ function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
         startISO: str(form, "startISO"),
         endISO: str(form, "endISO"),
         rsvpDeadlineISO: str(form, "rsvpDeadlineISO"),
+        timeZone: isTimeZone(str(form, "timeZone")) ? str(form, "timeZone") : stored.timeZone,
         contactName: str(form, "contactName"),
         contactEmail: str(form, "contactEmail"),
         giftShippingAddress: str(form, "giftShippingAddress"),
@@ -107,6 +115,29 @@ function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
         allowKids: bool(form, "allowKids"),
         collectPhone: bool(form, "collectPhone"),
       };
+    case "photos": {
+      const mode = str(form, "photoWall");
+      const closes = str(form, "photoWallClosesISO");
+      /*
+       * The field comes pre-filled with the preset, a week after the event.
+       * Saving that unchanged stores blank, so the closing time keeps
+       * following the event date if the hosts move it. Anything else the
+       * hosts typed is kept as it is; anything unreadable is dropped rather
+       * than stored and silently never matching.
+       */
+      const wellFormed = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(closes);
+      const preset = defaultClosesISO(stored.startISO, stored.endISO);
+      const storage = str(form, "photoStorage");
+      return {
+        photoWall: (PHOTO_WALL_MODES as readonly string[]).includes(mode)
+          ? (mode as PhotoWallMode)
+          : "auto",
+        photoWallClosesISO: wellFormed && closes !== preset ? closes : "",
+        photoStorage: (PHOTO_STORAGE_OPTIONS as readonly string[]).includes(storage)
+          ? (storage as PhotoStorage)
+          : "site",
+      };
+    }
     case "access":
       // Handled separately — the password never goes through this path.
       return {};
@@ -118,7 +149,7 @@ export async function saveSettings(
   formData: FormData
 ): Promise<SettingsState> {
   await assertAdmin();
-  const { t } = await getTranslation();
+  const [{ t }, stored] = await Promise.all([getTranslation(), getSettings()]);
 
   const tab = String(formData.get("tab") ?? "") as SettingsTab;
   if (!SETTINGS_TABS.includes(tab)) {
@@ -166,7 +197,7 @@ export async function saveSettings(
     if (tab !== "access") {
       await client.mutation(api.settings.update, {
         key,
-        fields: fieldsForTab(tab, formData),
+        fields: fieldsForTab(tab, formData, stored),
         defaults: DEFAULT_SETTINGS,
       });
     }

@@ -13,15 +13,18 @@ administer week to week.
 | `/invitation` | Guests | Date, place, details, add-to-calendar |
 | `/rsvp` | Guests | The RSVP form |
 | `/registry` | Guests | Links to your registries |
+| `/photos` | Guests, from the event date | The photo wall: everything guests have added |
+| `/photos/add` | Guests, from the event date | Upload up to ten photos at a time |
 | `/admin` | Hosts | Host sign-in (separate password) |
 | `/admin/dashboard` | Hosts | Headcounts, meal totals, every response, CSV export |
+| `/admin/photos` | Hosts | Every photo, including ones guests removed; restore or delete for good |
 | `/admin/settings` | Hosts | Everything guests see |
 
 ## Editing the site
 
-Sign in at `/admin`, then open **Settings**. It's split into five sections —
-The event, Wording, Registries, RSVP form, Guest password — and **each one
-saves on its own**. Switching sections with unsaved edits asks whether to
+Sign in at `/admin`, then open **Settings**. It's split into six sections —
+The event, Wording, Registries, RSVP form, Photos, Guest password — and
+**each one saves on its own**. Switching sections with unsaved edits asks whether to
 discard them or stay put.
 
 Names, dates, venue, registries, meal options, contact details, and the guest
@@ -34,6 +37,56 @@ Dates are stored as real dates and formatted per language, so you never type
 
 `src/lib/defaults.ts` holds what a fresh install shows before the first save.
 That is the only file to touch when forking this for a different event.
+
+## The photo wall
+
+On the day of the shower a banner appears above the invitation and a
+**Photos** tab joins the guest nav. Guests pick up to ten photos at a time from
+their phone, see thumbnails at once, add an optional name, and tap once to
+upload. The wall shows everyone's photos in justified rows, newest first,
+loading more as you scroll; tapping one opens a full-screen viewer with swipe,
+arrows and keyboard.
+
+There are still no accounts. The first visit to the photo pages sets a random
+device cookie, and a photo remembers the device that added it — "your photos"
+means "photos from this phone". A guest can remove their own photos, which
+only hides them: hosts see hidden photos on `/admin/photos` and are the only
+ones who restore or delete for good.
+
+**Where photos go.** Settings → Photos offers two storages for the original:
+
+- **This site** (the default, no setup). Originals are not kept. The phone
+  makes a ~2400px WebP (JPEG on browsers that cannot encode WebP), good for
+  phones and prints up to about 8×10, and that is what the wall shows. These
+  live in Convex file storage inside a 500 MB cap; the host pages show a
+  meter, and at the cap uploads stop until photos are deleted.
+- **Google Drive.** The phone makes a ~1600px web copy for the wall and sends
+  the untouched original straight to a folder in the hosts' own Google Drive
+  — the bytes never pass through Vercel, which could not take them anyway.
+  Connect the Drive once from Settings → Photos (see
+  [Google Drive](#google-drive) below).
+
+Changing the choice only affects photos added from then on. If Drive is the
+chosen storage and it is not connected, or Google stops answering, uploads
+**pause** for everyone rather than quietly losing originals: the upload page
+sends guests back to the wall with a "try again later" note, the host pages
+say what happened and offer Check again, Reconnect, or switching to this
+site, and an outage on Google's side clears itself — the site re-probes every
+couple of minutes on a page load. A revoked grant only clears on reconnect.
+
+"This site" maps onto Convex file storage on purpose: Convex also ships a
+self-hosted backend as a Docker image that keeps files on a local volume, so
+the same code path is "local storage" in a container later.
+
+**When it opens and closes.** By default the wall opens at midnight on the
+event date, by the clock in the event's time zone — set on the Event tab in
+Settings, and worth checking before the day. Settings → Photos can open it now, for a test run,
+and holds the closing date and time, preset to a week after the event. On
+that moment uploads stop while what was added stays viewable. Change it if
+you like; left as the preset it follows the event date if that moves.
+
+The design and the decisions behind it are in
+[docs/photo-wall.md](docs/photo-wall.md).
 
 ## Languages
 
@@ -64,6 +117,51 @@ It prints a deployment URL — put it in `CONVEX_URL`. Fill in the rest of
 ```bash
 pnpm exec convex env set ADMIN_API_KEY <the same value as in .env.local>
 ```
+
+### Google Drive
+
+Optional, and the only setup step that involves a third party. It lets guest
+photos be saved at full quality to a folder in your own Google Drive.
+
+1. In [Google Cloud](https://console.cloud.google.com/), make a project (or
+   use one), enable the **Google Drive API**, and create an OAuth client of
+   type **Web application**.
+2. Add `https://<your site>/api/google/callback` — and
+   `http://localhost:3001/api/google/callback` for development — as authorised
+   redirect URIs.
+3. On the OAuth consent screen, set the publishing status to **In production**.
+   In "Testing", Google expires the refresh token after seven days and the
+   connection silently stops working. The only scope used, `drive.file`, is
+   non-sensitive, so no verification is needed.
+4. Put the client id and secret in `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET` (`.env.local` locally, the project settings on
+   Vercel).
+5. Sign in at `/admin`, open Settings → Photos, and press **Connect Google
+   Drive**. The site creates its own folder in your Drive and shows a link to
+   it.
+
+The `drive.file` scope reaches only files and folders the site itself created —
+never the rest of your Drive. You can revoke it any time from your Google
+account's connected-apps page; the folder and the photos in it stay yours.
+
+**The tidy cron finds the site on its own.** A cron on the Convex deployment
+tidies photo storage every ten minutes by calling the site. It learns the
+site's address from the site itself: whenever a host opens an admin page,
+the site records the origin that request came in on. So after deploying,
+sign in at `/admin` once and the cron has what it needs — on Vercel, behind
+a new domain, or in Docker alike. Until then it logs that it is skipping,
+and tidying still runs whenever someone uses the site.
+
+Development origins (`localhost`, `127.0.0.1`, `*.local`) are never
+recorded, since a cron in Convex's cloud could not reach them. To exercise
+the endpoint by hand locally, which is all the cron does:
+
+```bash
+curl -X POST http://localhost:3001/api/photos/tidy -H "Authorization: Bearer $ADMIN_API_KEY"
+```
+
+To pin the address instead, set `SITE_URL` on the Convex deployment; it
+overrides what the site recorded.
 
 ### Running it
 
@@ -183,12 +281,39 @@ What's in place:
   the guest password can flood your headcount.
 - **You can collect less.** Turn off the phone field in Settings and it is
   neither asked for nor stored.
+- **A guest can only remove their own photos, and remove only hides.** The
+  device cookie that marks "yours" is never sent back to a browser — the
+  server answers `mine: true` per photo — so nobody can hide another phone's
+  photos, and nothing a guest does deletes anything. Hosts delete.
+- **Every photo route checks the session itself**, like the Server Actions.
+  Uploads are throttled per device — the device cookie is signed, and new
+  ones are rationed per address, so a fresh identity is not free — and, as
+  a backstop far above what a whole party produces on one Wi-Fi address,
+  per address. What actually stops someone with the guest password from
+  filling the Drive is a budget on originals *in flight*: bytes opened for
+  upload and not yet recorded, summed over the last thirty minutes across
+  the site. A party's uploads leave that count within seconds of landing;
+  a script's never do, and it stops at the budget. The reservation is
+  consumed inside the transaction that records the photo, and only if it
+  is the same device's, unused, at least the size Google reports for the
+  file, and older than the file — so it cannot be released against some
+  other upload, and one Drive file records once. The folder and the site's
+  storage are both tidied on a ten-minute cadence by a Convex cron, each
+  continuing from where the last pass stopped: anything older than thirty
+  minutes that no photo record points at is deleted.
+- **The Drive refresh token is sealed** (AES-GCM under a key derived from
+  `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
+  reach your Drive. The site asks Google for the `drive.file` scope only.
+- **Photos load from two named origins and nowhere else.** The CSP admits the
+  Convex storage host for images and Google's upload host for the phone's
+  direct PUT; everything else stays `'self'`.
 
 Known limits, stated plainly:
 
-- Changing the guest password stops new sign-ins with the old one. Guests
-  already signed in keep their session until it expires — signed cookies are
-  checked without a database round trip, which is what keeps the site fast.
+- Changing the guest password signs every guest out. Cookies are signed
+  rather than stored, so nothing on the server is deleted; instead each guest
+  page refuses a cookie minted before the last password change, and the
+  guest enters the new password once.
 - Rate limiting is per IP address. It stops scripted guessing; it does not stop
   a determined attacker with many addresses. A strong admin password does.
 - Anyone with the admin password can export the entire guest list as a CSV.
@@ -201,6 +326,16 @@ Known limits, stated plainly:
 - If the settings cannot be read, guest sign-in fails closed rather than
   falling back to `SITE_PASSWORD`. An outage must not reinstate a password the
   hosts have already rotated away from.
+- Photo web copies are served from Convex storage by unguessable URL. Anyone
+  holding such a URL can load that image without the guest password; the
+  wall itself is gated, and nothing links the URLs from outside it.
+- An upload abandoned between the original reaching Drive and the record
+  being written leaves a file in the Drive folder with no photo on the wall
+  for up to about forty minutes, until the cron next tidies the folder.
+- The photo wall has been tested lightly, not at event load. Convex's free
+  tier includes 1 GB of file bandwidth a month; a busy day of scrolling could
+  approach it. The direct phone-to-Drive upload should be tried on a real
+  phone over cellular before the day.
 
 ## Design system
 
@@ -212,8 +347,8 @@ Nothing else in the app hard-codes a hex value, a radius, or a shadow.
 
 **Primitives** live in [`src/components/ui/`](src/components/ui) and are the
 only place tokens become styles: `Button`, `Card`, `Input`, `Select`,
-`Textarea`, `Checkbox`, `Label`, `Alert`, `Badge`, `Stat`, `NavLink`,
-`SegmentedControl`, `TabList`, and the type scale. Pages compose these; a page
+`Textarea`, `Checkbox`, `Label`, `Alert`, `Badge`, `Callout`, `ProgressBar`,
+`Stat`, `NavLink`, `SegmentedControl`, `TabList`, and the type scale. Pages compose these; a page
 that writes its own `bg-…` or `rounded-…` for a component is a bug.
 
 That layering is why the host pages and the guest pages can't drift: both

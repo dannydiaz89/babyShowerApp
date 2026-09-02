@@ -59,6 +59,12 @@ export default defineSchema({
     startISO: v.string(),
     endISO: v.string(),
     rsvpDeadlineISO: v.string(),
+    /*
+     * Where the event is, as an IANA zone. Decides when the photo wall
+     * opens and closes. Optional: rows from before it existed read as the
+     * built-in default.
+     */
+    timeZone: v.optional(v.string()),
 
     // Free text, per language
     tagline: localized,
@@ -91,7 +97,165 @@ export default defineSchema({
     // Absent means fall back to the SITE_PASSWORD environment variable.
     guestPasswordHash: v.optional(v.string()),
 
+    /*
+     * When guest sessions were last invalidated.
+     *
+     * Guest cookies are stateless — signed, with nothing on the server to
+     * delete — so changing the password would otherwise leave every session
+     * minted under the old one working for its full 30 days. Bumping this on
+     * every password change gives the signature a floor to be checked against,
+     * which is what makes rotating the password actually revoke access.
+     *
+     * Optional: rows written before this existed read as "never invalidated".
+     */
+    guestSessionEpoch: v.optional(v.number()),
+
+    /*
+     * When guests may add photos. "auto" opens the wall on the event date;
+     * "open" opens it now, for a test run. Either way it stays open until
+     * `photoWallClosesISO`, a local "YYYY-MM-DDTHH:mm" like `startISO`, or
+     * for ever when that is blank. Set once and forgotten, rather than a
+     * switch someone has to remember on the night. Both optional: rows
+     * written before the photo wall existed read as "auto", never closing.
+     *
+     * "closed" is retired — it was a manual switch before the closing time
+     * existed — and stays accepted so a row that still holds it validates.
+     * src/lib/settings.ts reads it as "auto" with no closing time.
+     */
+    photoWall: v.optional(
+      v.union(v.literal("auto"), v.literal("open"), v.literal("closed"))
+    ),
+    photoWallClosesISO: v.optional(v.string()),
+
+    /*
+     * Where a photo's original goes. "site": nowhere — the site keeps a
+     * larger web copy and that is all, inside PHOTO_STORAGE_CAP_BYTES.
+     * "drive": the hosts' Google Drive, full quality. Optional: rows from
+     * before the choice existed read as "site", which works with no setup.
+     */
+    photoStorage: v.optional(v.union(v.literal("site"), v.literal("drive"))),
+
     updatedAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
+   * One guest-uploaded photo.
+   *
+   * The original lives in the hosts' Google Drive and is never read back by
+   * the site; `driveFileId` is kept so a host delete can remove it. What the
+   * wall shows is the web copy in Convex storage, made on the guest's phone.
+   *
+   * `uploaderId` is the random id from that device's cookie. It is the only
+   * link between a photo and the phone that added it, so it must never be
+   * returned to a browser: anyone holding it could hide that device's photos.
+   * The wall query answers `mine: true` instead.
+   */
+  photos: defineTable({
+    status: v.union(v.literal("live"), v.literal("hidden")),
+    uploaderId: v.string(),
+    uploaderName: v.optional(v.string()),
+
+    webStorageId: v.id("_storage"),
+    // Pixel size of the web copy, so the wall can lay rows out before the
+    // image bytes arrive.
+    width: v.number(),
+    height: v.number(),
+    webBytes: v.number(),
+
+    driveFileId: v.optional(v.string()),
+    originalName: v.optional(v.string()),
+    originalBytes: v.optional(v.number()),
+
+    hiddenAt: v.optional(v.number()),
+    hiddenBy: v.optional(v.union(v.literal("guest"), v.literal("host"))),
+  })
+    // Convex appends _creationTime, so this orders live (or hidden) photos by
+    // time without touching the other status. "All", for the hosts, walks the
+    // built-in creation-time index instead.
+    .index("by_status", ["status"])
+    // So a stored copy can be checked for a row before being discarded.
+    .index("by_webStorageId", ["webStorageId"])
+    // So the Drive folder can be reconciled against what is recorded.
+    .index("by_driveFileId", ["driveFileId"]),
+
+  /**
+   * How many photos are live and hidden. Convex has no count operator, and
+   * the wall header and the host filter both show these; kept in step by
+   * every photo write in the same transaction, like `rsvpTotals`.
+   */
+  photoTotals: defineTable({
+    singleton: v.literal("photos"),
+    live: v.number(),
+    hidden: v.number(),
+    /** Web-copy bytes across live and hidden photos, against the storage cap. Optional: older rows read as 0. */
+    bytes: v.optional(v.number()),
+    /** When stored copies were last swept for ones no photo points at. */
+    lastSweptAt: v.optional(v.number()),
+    /** Where the sweep left off in the storage listing; absent means start over. */
+    sweepCursor: v.optional(v.string()),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
+   * Where the site is, as it last saw itself from a host's request.
+   *
+   * The tidy cron in convex/tidy.ts calls the site, and this is how it
+   * knows the address without anyone setting one: the site records its
+   * own origin whenever a host loads an admin page, so a deploy, a domain
+   * change or a Docker setup needs no extra step. SITE_URL on the
+   * deployment, if set, overrides it.
+   */
+  site: defineTable({
+    singleton: v.literal("site"),
+    url: v.string(),
+    seenAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
+   * One Drive upload the site opened for a phone: how big, when, and
+   * whether the photo was recorded afterwards. The sum of unrecorded sizes
+   * over the recent window is the in-flight budget in convex/limits.ts.
+   * Rows are swept once they are well past the window.
+   */
+  driveSessions: defineTable({
+    uploaderId: v.string(),
+    address: v.string(),
+    size: v.number(),
+    openedAt: v.number(),
+    finalized: v.boolean(),
+  }).index("by_finalized_openedAt", ["finalized", "openedAt"]),
+
+  /**
+   * The hosts' Google Drive, connected once from Settings.
+   *
+   * `refreshTokenSealed` is encrypted by the Next.js server with a key derived
+   * from AUTH_SECRET before it gets here (see src/lib/seal.ts), so a copy of
+   * the database alone cannot reach the Drive. The app only ever holds the
+   * `drive.file` scope, which reaches files it created and nothing else.
+   */
+  driveConnection: defineTable({
+    singleton: v.literal("drive"),
+    account: v.string(),
+    folderId: v.string(),
+    folderName: v.string(),
+    folderUrl: v.string(),
+    refreshTokenSealed: v.string(),
+    connectedAt: v.number(),
+
+    /*
+     * Whether Google last answered. A failure recorded here pauses uploads
+     * until a later probe succeeds ("unavailable": Google down, a timeout)
+     * or the hosts reconnect ("revoked": the grant is gone and retrying
+     * cannot help). Absent means healthy.
+     */
+    health: v.optional(v.union(v.literal("ok"), v.literal("failing"))),
+    failureKind: v.optional(v.union(v.literal("unavailable"), v.literal("revoked"))),
+    failureMessage: v.optional(v.string()),
+    failedAt: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    /** When the folder was last reconciled against the photo rows. */
+    lastReconciledAt: v.optional(v.number()),
+    /** Google's page token where the last reconcile stopped; absent means the first page. */
+    reconcileCursor: v.optional(v.string()),
   }).index("by_singleton", ["singleton"]),
 
   /**

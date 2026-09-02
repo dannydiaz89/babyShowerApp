@@ -14,6 +14,23 @@ export type Registry = {
   accent: string;
 };
 
+/**
+ * When guests may add photos. "auto" opens the wall on the event date;
+ * "open" opens it now. Closing is a moment, not a mode — see
+ * `photoWallClosesISO` and src/lib/photo-wall.ts for the rule.
+ */
+export const PHOTO_WALL_MODES = ["auto", "open"] as const;
+export type PhotoWallMode = (typeof PHOTO_WALL_MODES)[number];
+
+/**
+ * Where a photo's original goes. "site" keeps only a larger web copy in the
+ * site's own storage — no setup, but a cap; "drive" keeps the original in
+ * the hosts' Google Drive. The web copy lives in the site's storage either
+ * way; this is only about the original.
+ */
+export const PHOTO_STORAGE_OPTIONS = ["site", "drive"] as const;
+export type PhotoStorage = (typeof PHOTO_STORAGE_OPTIONS)[number];
+
 export type Settings = {
   babyName: string;
   honorees: string;
@@ -25,6 +42,11 @@ export type Settings = {
   endISO: string;
   /** "YYYY-MM-DD" */
   rsvpDeadlineISO: string;
+  /**
+   * Where the event is, as an IANA time zone. "The event date" for the
+   * photo wall means the calendar date there, not on the server.
+   */
+  timeZone: string;
   tagline: Localized;
   dressCode: Localized;
   notes: Localized;
@@ -36,7 +58,41 @@ export type Settings = {
   askMeal: boolean;
   allowKids: boolean;
   collectPhone: boolean;
+  photoWall: PhotoWallMode;
+  /**
+   * Local datetime, "YYYY-MM-DDTHH:mm", after which uploads stop. Blank means
+   * the preset — a week after the event — which then follows the event date
+   * if that changes. See src/lib/photo-wall.ts.
+   */
+  photoWallClosesISO: string;
+  photoStorage: PhotoStorage;
 };
+
+/**
+ * Time zones the settings form offers. Any valid IANA zone is accepted on
+ * save; these are the ones a host is likely to want without looking it up.
+ */
+export const TIME_ZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Mexico_City",
+] as const;
+
+/** Whether the runtime knows this zone. */
+export function isTimeZone(value: unknown): value is string {
+  if (typeof value !== "string" || !value) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Swatches offered for registry cards. Fixed so Tailwind can see the classes. */
 export const REGISTRY_ACCENTS = ["sage", "clay", "amber", "sky"] as const;
@@ -50,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startISO: "2026-10-18T14:00",
   endISO: "2026-10-18T17:00",
   rsvpDeadlineISO: "2026-10-01",
+  timeZone: "America/Chicago",
   tagline: {
     en: "A little one is on the way",
     es: "Viene un pequeñito en camino",
@@ -103,4 +160,7 @@ export const DEFAULT_SETTINGS: Settings = {
   askMeal: true,
   allowKids: true,
   collectPhone: true,
+  photoWall: "auto",
+  photoWallClosesISO: "",
+  photoStorage: "site",
 };

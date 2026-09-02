@@ -4,6 +4,9 @@ import { useActionState, useCallback, useEffect, useId, useRef, useState } from 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
+import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
+import type { DriveConnection } from "@/lib/google-drive";
+import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
 import {
   SETTINGS_TABS,
   type SettingsState,
@@ -11,6 +14,7 @@ import {
 } from "@/lib/settings-tabs";
 import {
   Alert,
+  AnchorButton,
   Button,
   FieldsetLabel,
   Hint,
@@ -30,11 +34,15 @@ import {
   cardClass,
 } from "@/components/ui";
 import {
+  PHOTO_STORAGE_OPTIONS,
+  PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
+  TIME_ZONE_OPTIONS,
   type Localized,
   type Registry,
   type Settings,
 } from "@/lib/defaults";
+import { fill } from "@/lib/i18n/text";
 import { MAX_MEAL_LABEL, MAX_MEAL_LABELS } from "@/lib/meals";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/text";
@@ -232,6 +240,7 @@ function Panel({
   state,
   t,
   onDirty,
+  onBeforeSubmit,
   children,
 }: {
   formAction: (formData: FormData) => void;
@@ -242,6 +251,8 @@ function Panel({
   state: SettingsState;
   t: Dictionary;
   onDirty: () => void;
+  /** Return false to hold the submit — to ask first, say. */
+  onBeforeSubmit?: (form: HTMLFormElement) => boolean;
   children: React.ReactNode;
 }) {
   const forThisTab = state.tab === tab;
@@ -253,6 +264,9 @@ function Panel({
       aria-label={label}
       onInput={onDirty}
       onChange={onDirty}
+      onSubmit={(event) => {
+        if (onBeforeSubmit && !onBeforeSubmit(event.currentTarget)) event.preventDefault();
+      }}
       className={`${cardClass} space-y-6 px-6 py-6`}
     >
       <input type="hidden" name="tab" value={tab} />
@@ -282,23 +296,46 @@ function Panel({
   );
 }
 
+/** What the Photos tab shows about Google Drive. Read on the server; never the token. */
+export type DrivePanel = {
+  /** GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set. */
+  configured: boolean;
+  connection: DriveConnection | null;
+  /** Where the storage stands, for the meter and the pause notice. */
+  status: StorageStatus;
+  paused: PauseReason | null;
+  /** The site's storage cap, formatted. */
+  capLabel: string;
+  locale: string;
+  /** Outcome of a connect or disconnect the host just came back from. */
+  notice: { ok: boolean; text: string } | null;
+  /** The event date, formatted, for the auto-open hint. */
+  eventDate: string;
+  /** The preset closing time, a week after the event, shown when nothing is set. */
+  defaultCloses: string;
+};
+
 export function SettingsForm({
   settings,
   t,
   locale,
   hasStoredPassword,
+  drive,
+  initialTab = "event",
 }: {
   settings: Settings;
   t: Dictionary;
   locale: Locale;
   hasStoredPassword: boolean;
+  drive: DrivePanel;
+  initialTab?: SettingsTab;
 }) {
   const [state, formAction] = useActionState<SettingsState, FormData>(saveSettings, {
     status: "idle",
   });
 
   const router = useRouter();
-  const [tab, setTab] = useState<SettingsTab>("event");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [dirty, setDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<SettingsTab | null>(null);
   /** What to do if the host chooses "discard" — leave, rather than switch tab. */
@@ -317,6 +354,16 @@ export function SettingsForm({
   );
   const [nextKey, setNextKey] = useState(1000);
   const [deadline, setDeadline] = useState(settings.rsvpDeadlineISO);
+  /*
+   * The closing-time field keeps its own date and time state, so "back to
+   * the preset" remounts it with the preset as its starting value rather
+   * than reaching into the two halves.
+   */
+  const [closesKey, setClosesKey] = useState(0);
+  /** A storage change waiting on the host's confirmation, and that it was given. */
+  const [pendingStorage, setPendingStorage] = useState<"site" | "drive" | null>(null);
+  const storageConfirmed = useRef(false);
+  const storageDialogRef = useRef<HTMLDialogElement>(null);
 
   // Dates and times are rendered with an explicit locale so the server and the
   // browser format them identically.
@@ -344,12 +391,22 @@ export function SettingsForm({
     wording: t.settings.sectionText,
     registries: t.settings.sectionRegistry,
     form: t.settings.sectionForm,
+    photos: t.settings.sectionPhotos,
     access: t.settings.sectionAccess,
   };
+
+  const wallModeLabels = {
+    auto: [
+      t.settings.wallModeAuto,
+      fill(t.settings.wallModeAutoHint, { date: drive.eventDate, zone: settings.timeZone.replace(/_/g, " ") }),
+    ],
+    open: [t.settings.wallModeOpen, t.settings.wallModeOpenHint],
+  } as const;
 
   // A save that succeeded means this tab is clean again.
   useEffect(() => {
     if (state.status === "saved" && state.tab === tab) setDirty(false);
+    storageConfirmed.current = false;
   }, [state, tab]);
 
   // Closing the tab or reloading would lose the same edits a tab switch would.
@@ -542,6 +599,21 @@ export function SettingsForm({
               dateFieldLabel={t.settings.dateInput}
               timeFieldLabel={t.settings.timeInput}
             />
+          </div>
+
+          <div>
+            <Label htmlFor="settings-timezone">{t.settings.timeZone}</Label>
+            <Select id="settings-timezone" name="timeZone" defaultValue={settings.timeZone} aria-describedby="settings-timezone-hint">
+              {(TIME_ZONE_OPTIONS as readonly string[]).includes(settings.timeZone)
+                ? null
+                : <option value={settings.timeZone}>{settings.timeZone}</option>}
+              {TIME_ZONE_OPTIONS.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone.replace(/_/g, " ")}
+                </option>
+              ))}
+            </Select>
+            <Hint id="settings-timezone-hint">{t.settings.timeZoneHint}</Hint>
           </div>
 
           <div className="sm:max-w-xs">
@@ -756,6 +828,224 @@ export function SettingsForm({
             </Button>
           </div>
         </Panel>
+      ) : null}
+
+      {tab === "photos" ? (
+        <>
+          <Panel
+            formAction={formAction}
+            panelId={panelId}
+            tab={tab}
+            label={TAB_LABELS[tab]}
+            dirty={dirty}
+            state={state}
+            t={t}
+            onDirty={() => setDirty(true)}
+            onBeforeSubmit={(form) => {
+              const chosen = String(new FormData(form).get("photoStorage") ?? "");
+              if (chosen === settings.photoStorage || storageConfirmed.current) return true;
+              setPendingStorage(chosen === "drive" ? "drive" : "site");
+              storageDialogRef.current?.showModal();
+              return false;
+            }}
+          >
+            <fieldset>
+              <FieldsetLabel>{t.settings.wallMode}</FieldsetLabel>
+              <div className="space-y-3">
+                {PHOTO_WALL_MODES.map((mode) => (
+                  <label key={mode} className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="photoWall"
+                      value={mode}
+                      defaultChecked={settings.photoWall === mode}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-ink">
+                        {wallModeLabels[mode][0]}
+                      </span>
+                      <span className="block text-xs text-ink-muted">{wallModeLabels[mode][1]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="-mt-2">
+              <DateTimeField
+                key={closesKey}
+                id="settings-photo-closes"
+                name="photoWallClosesISO"
+                legend={t.settings.wallCloses}
+                value={closesKey === 0 ? settings.photoWallClosesISO || drive.defaultCloses : drive.defaultCloses}
+                locale={intlLocale}
+                dateLabels={dateLabels}
+                timeLabels={timeLabels}
+                dateFieldLabel={t.settings.dateInput}
+                timeFieldLabel={t.settings.timeInput}
+              />
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <Hint className="mt-0">{t.settings.wallClosesHint}</Hint>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  onClick={() => {
+                    setClosesKey((k) => k + 1);
+                    setDirty(true);
+                  }}
+                  className="shrink-0 px-0"
+                >
+                  {t.settings.wallClosesReset}
+                </Button>
+              </div>
+            </div>
+            <fieldset className="border-t border-border pt-5">
+              <FieldsetLabel>{t.settings.storageTitle}</FieldsetLabel>
+              <div className="space-y-4">
+                {PHOTO_STORAGE_OPTIONS.map((option) => (
+                  <div key={option}>
+                    <label className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="photoStorage"
+                        value={option}
+                        defaultChecked={settings.photoStorage === option}
+                        className="mt-1 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-ink">
+                          {option === "site" ? t.settings.storageSite : t.settings.storageDrive}
+                        </span>
+                        <span className="block text-xs text-ink-muted">
+                          {option === "site"
+                            ? fill(t.settings.storageSiteHint, { cap: drive.capLabel })
+                            : t.settings.storageDriveHint}
+                        </span>
+                      </span>
+                    </label>
+
+                    {/* What belongs to each choice sits under it, indented past the radio. */}
+                    <div className="mt-3 max-w-md pl-7">
+                      {option === "site" ? (
+                        <StorageMeter status={drive.status} paused={drive.paused} t={t} />
+                      ) : (
+                        <div className="space-y-3">
+                          {drive.notice ? (
+                            <Alert tone={drive.notice.ok ? "positive" : "critical"} role="status">
+                              {drive.notice.text}
+                            </Alert>
+                          ) : null}
+
+                          <DrivePauseNotice
+                            paused={drive.paused}
+                            connection={drive.connection}
+                            t={t}
+                            locale={drive.locale}
+                            checkFormId="drive-check"
+                          />
+
+                          {!drive.configured ? (
+                            <p className="text-sm text-ink">{t.settings.driveUnconfigured}</p>
+                          ) : drive.connection ? (
+                            <>
+                              <p className="text-sm text-ink">
+                                {fill(t.settings.driveConnected, { account: drive.connection.account })}
+                                {" · "}
+                                <a
+                                  href={drive.connection.folderUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-accent underline underline-offset-4"
+                                >
+                                  {t.settings.driveFolder}
+                                  <span className="sr-only"> ({t.registry.opensInNewTab})</span>
+                                </a>
+                              </p>
+                              {drive.connection.health === "ok" && !drive.paused ? (
+                                <p className="text-xs text-success">{t.settings.driveHealthy}</p>
+                              ) : null}
+                              {/*
+                                * These post to their own forms, declared outside
+                                * this panel and named by id: a form inside a form
+                                * is not HTML, and connecting is not a setting.
+                                */}
+                              <div className="flex flex-wrap gap-3">
+                                <Button type="submit" form="drive-check" variant="secondary" size="sm">
+                                  {t.settings.driveCheck}
+                                </Button>
+                                <AnchorButton href="/api/google/start" variant="secondary" size="sm">
+                                  {t.settings.driveReconnect}
+                                </AnchorButton>
+                                <Button type="submit" form="drive-disconnect" variant="quiet" size="sm">
+                                  {t.settings.driveDisconnect}
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-sm text-ink">{t.settings.driveNotConnected}</p>
+                              <AnchorButton href="/api/google/start" variant="primary" size="sm">
+                                {t.settings.driveConnect}
+                              </AnchorButton>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Hint className="mt-4">{t.settings.storageSwitchNote}</Hint>
+            </fieldset>
+
+          </Panel>
+
+          {/* The forms the Drive buttons inside the panel post to. */}
+          <form id="drive-check" method="post" action="/api/google/check" hidden />
+          <form id="drive-disconnect" method="post" action="/api/google/disconnect" hidden />
+
+          {/*
+            * Where photos go is not a setting to change by accident: a
+            * submit that changes it stops here and asks first.
+            */}
+          <Modal
+            ref={storageDialogRef}
+            titleId="storage-confirm-title"
+            title={t.settings.storageConfirmTitle}
+            closeLabel={t.common.close}
+            onClose={() => setPendingStorage(null)}
+            className="max-w-md"
+          >
+            <p className="text-sm leading-relaxed text-ink-muted">
+              {pendingStorage === "drive"
+                ? t.settings.storageConfirmToDrive
+                : t.settings.storageConfirmToSite}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">{t.settings.storageSwitchNote}</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => storageDialogRef.current?.close()}
+                autoFocus
+              >
+                {t.settings.storageConfirmCancel}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  storageConfirmed.current = true;
+                  storageDialogRef.current?.close();
+                  (document.getElementById(panelId) as HTMLFormElement | null)?.requestSubmit();
+                }}
+              >
+                {t.settings.storageConfirmButton}
+              </Button>
+            </div>
+          </Modal>
+        </>
       ) : null}
 
       {tab === "access" ? (

@@ -5,7 +5,7 @@
  * only export async functions, so a plain array exported from there is not a
  * real array at runtime — it silently becomes unusable in the client bundle.
  */
-export const SETTINGS_TABS = ["event", "wording", "registries", "form", "access"] as const;
+export const SETTINGS_TABS = ["event", "wording", "registries", "form", "photos", "access"] as const;
 
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 

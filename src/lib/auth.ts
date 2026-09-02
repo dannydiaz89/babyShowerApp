@@ -73,27 +73,76 @@ export async function passwordMatches(
   return safeEqual(a, b);
 }
 
+/**
+ * A token that carried a valid signature for the role asked about, and has not
+ * expired.
+ *
+ * `issuedAt` is the part callers cannot get anywhere else: a signed cookie has
+ * no server-side record to revoke, so the only way to invalidate one early is
+ * to compare when it was minted against a cutoff. See `hasGuestAccess` in
+ * lib/session.ts, which checks it against the guest-password epoch.
+ */
+export type VerifiedToken = { issuedAt: number; expiresAt: number };
+
 export async function createToken(role: Role): Promise<string> {
-  const expires = Date.now() + sessionSeconds(role) * 1000;
-  const payload = `${role}.${expires}`;
+  const issued = Date.now();
+  const expires = issued + sessionSeconds(role) * 1000;
+  // Issue time is inside the signed payload, not alongside it: a holder who
+  // could edit it would simply date their cookie forward past any cutoff.
+  const payload = `${role}.${issued}.${expires}`;
   return `${payload}.${await hmac(payload)}`;
 }
 
+/**
+ * Verify a cookie's signature, role and expiry. Returns what the token claims
+ * once it has proved it, or null.
+ *
+ * Deliberately no I/O: this runs in middleware on every request, and the
+ * revocation check that needs the database is layered on top by callers that
+ * are already reading it.
+ */
 export async function verifyToken(
   token: string | undefined,
   role: Role
-): Promise<boolean> {
-  if (!token) return false;
+): Promise<VerifiedToken | null> {
+  if (!token) return null;
   const parts = token.split(".");
-  if (parts.length !== 3) return false;
+  if (parts.length !== 4) return null;
 
-  const [tokenRole, expiresRaw, signature] = parts;
-  if (tokenRole !== role) return false;
+  const [tokenRole, issuedRaw, expiresRaw, signature] = parts;
+  if (tokenRole !== role) return null;
 
-  const expires = Number(expiresRaw);
-  if (!Number.isFinite(expires) || expires < Date.now()) return false;
+  const issuedAt = Number(issuedRaw);
+  const expiresAt = Number(expiresRaw);
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) return null;
+  if (expiresAt < Date.now()) return null;
 
-  return safeEqual(await hmac(`${tokenRole}.${expiresRaw}`), signature);
+  const signed = await hmac(`${tokenRole}.${issuedRaw}.${expiresRaw}`);
+  if (!safeEqual(signed, signature)) return null;
+
+  return { issuedAt, expiresAt };
+}
+
+/**
+ * Sign an arbitrary value so a cookie holding it cannot be made up.
+ *
+ * Used for the photo device id: the value itself is random, but a caller
+ * who can choose it can choose a fresh one per request and walk past any
+ * limit keyed on it. The label keeps this signature distinct from a
+ * session token's, so one can never pass for the other.
+ */
+export async function signValue(label: string, value: string): Promise<string> {
+  return `${value}.${await hmac(`${label}:${value}`)}`;
+}
+
+/** The value inside a signed cookie, or null if the signature does not hold. */
+export async function verifySignedValue(label: string, signed: string | undefined): Promise<string | null> {
+  if (!signed) return null;
+  const at = signed.lastIndexOf(".");
+  if (at <= 0) return null;
+  const value = signed.slice(0, at);
+  const signature = signed.slice(at + 1);
+  return safeEqual(await hmac(`${label}:${value}`), signature) ? value : null;
 }
 
 /** Shared cookie options, so login and logout paths cannot drift apart. */

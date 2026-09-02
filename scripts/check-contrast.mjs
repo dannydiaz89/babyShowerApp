@@ -25,7 +25,7 @@ const ratio = (a, b) => {
 
 /** [foreground, background, where it renders, floor] */
 const PAIRS = [
-  ...["canvas", "surface", "surface-sunken", "accent-soft", "danger-soft", "success-soft"].flatMap((bg) =>
+  ...["canvas", "surface", "surface-sunken", "accent-soft", "danger-soft", "success-soft", "gold-soft"].flatMap((bg) =>
     ["ink", "ink-muted", "accent", "accent-ink", "gold-ink"].map((fg) => [fg, bg, "body text", 4.5]),
   ),
   // Status colours must hold on their own tag ground and on every page surface.
@@ -37,7 +37,10 @@ const PAIRS = [
   ["ink-subtle", "danger-soft", "placeholder, invalid field", 4.5],
   ["on-accent", "accent", "primary button", 4.5],
   ["on-accent", "accent-hover", "primary button, hover", 4.5],
-  ...["canvas", "surface", "surface-sunken", "danger-soft"].map((bg) => ["danger", bg, "error text", 4.5]),
+  ...["canvas", "surface", "surface-sunken", "danger-soft", "gold-soft"].map((bg) => ["danger", bg, "error text", 4.5]),
+  // The photo viewer's dark ground: the caption and the controls on it.
+  ["on-viewer", "viewer", "photo viewer text", 4.5],
+  ["on-viewer-muted", "viewer", "photo viewer caption", 4.5],
   // WCAG 1.4.11: a field's edge is the only thing marking where it begins.
   ["border-field", "surface", "field boundary", 3],
   // Registry swatches. The initial inside one is decorative, but the pair is

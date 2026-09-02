@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions";
+import { registerSiteOrigin } from "@/lib/photos";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Badge, Button, ButtonLink, NavLink } from "@/components/ui";
 import type { Dictionary, Locale } from "@/lib/i18n";
@@ -55,9 +56,15 @@ export function SiteHeader({
           {brand}
         </Link>
 
+        {/*
+          * Four pages plus "Back to dashboard" do not fit a phone's width on
+          * one row. Rather than wrap into a third row or overlap the exit
+          * control, the page links scroll sideways when they must — on most
+          * phones they still fit — and the exit control keeps its place.
+          */}
         <nav
           aria-label={navLabel}
-          className="col-start-1 row-start-2 flex items-center gap-5 sm:col-start-2 sm:row-start-1 sm:justify-self-end"
+          className="col-start-1 row-start-2 flex min-w-0 items-center gap-5 overflow-x-auto whitespace-nowrap [scrollbar-width:none] sm:col-start-2 sm:row-start-1 sm:justify-self-end sm:overflow-visible"
         >
           {links.map((link) => (
             <NavLink key={link.href} href={link.href} active={current === link.href}>
@@ -72,7 +79,7 @@ export function SiteHeader({
           className="col-start-2 row-start-1 justify-self-end sm:col-start-3"
         />
 
-        <div className="col-start-2 row-start-2 justify-self-end sm:col-start-4 sm:row-start-1">
+        <div className="col-start-2 row-start-2 shrink-0 justify-self-end whitespace-nowrap sm:col-start-4 sm:row-start-1">
           {previewing ? (
             <ButtonLink href="/admin/dashboard" variant="quiet" size="sm">
               {t.nav.exitPreview}
@@ -96,12 +103,15 @@ export function GuestHeader({
   locale,
   t,
   previewing = false,
+  photos = false,
 }: {
   current: string;
   babyName: string;
   locale: Locale;
   t: Dictionary;
   previewing?: boolean;
+  /** The photo wall is open, so it gets a tab. See lib/photo-wall.ts. */
+  photos?: boolean;
 }) {
   return (
     <SiteHeader
@@ -115,12 +125,13 @@ export function GuestHeader({
         { href: "/invitation", label: t.nav.invitation },
         { href: "/rsvp", label: t.nav.rsvp },
         { href: "/registry", label: t.nav.registry },
+        ...(photos ? [{ href: "/photos", label: t.nav.photos }] : []),
       ]}
     />
   );
 }
 
-export function AdminHeader({
+export async function AdminHeader({
   current,
   babyName,
   locale,
@@ -131,6 +142,10 @@ export function AdminHeader({
   locale: Locale;
   t: Dictionary;
 }) {
+  // Every host page renders this, and a host's request is the one address
+  // known to reach the site — so this is where the site records where it is.
+  await registerSiteOrigin();
+
   return (
     <SiteHeader
       brand={babyName}
@@ -140,6 +155,7 @@ export function AdminHeader({
       navLabel={t.nav.hostArea}
       links={[
         { href: "/admin/dashboard", label: t.admin.dashboardShort },
+        { href: "/admin/photos", label: t.nav.photos },
         { href: "/admin/settings", label: t.admin.settings },
         { href: "/invitation", label: t.admin.viewSite },
       ]}

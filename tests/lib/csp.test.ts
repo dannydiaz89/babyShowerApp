@@ -48,6 +48,43 @@ describe("contentSecurityPolicy", () => {
   });
 });
 
+describe("contentSecurityPolicy origins", () => {
+  it("admits the photo storage host for images only", () => {
+    const csp = contentSecurityPolicy("n", false, {
+      imageOrigins: ["https://happy-otter-123.convex.cloud"],
+    });
+    expect(directive(csp, "img-src")).toContain("https://happy-otter-123.convex.cloud");
+    expect(directive(csp, "connect-src")).not.toContain("convex.cloud");
+    expect(directive(csp, "script-src")).not.toContain("convex.cloud");
+  });
+
+  it("admits the Drive upload host for requests only", () => {
+    const csp = contentSecurityPolicy("n", false, {
+      connectOrigins: ["https://www.googleapis.com"],
+    });
+    expect(directive(csp, "connect-src")).toBe("connect-src 'self' https://www.googleapis.com");
+    expect(directive(csp, "img-src")).not.toContain("googleapis");
+  });
+
+  it("reduces a URL with a path to its origin, and drops anything that is not https", () => {
+    const csp = contentSecurityPolicy("n", false, {
+      imageOrigins: [
+        "https://deploy.convex.cloud/api/storage/abc",
+        "http://insecure.example",
+        "not a url",
+        "",
+      ],
+    });
+    expect(directive(csp, "img-src")).toBe(
+      "img-src 'self' data: blob: https://deploy.convex.cloud"
+    );
+  });
+
+  it("leaves the policy unchanged when no origins are given", () => {
+    expect(contentSecurityPolicy("n", false, {})).toBe(contentSecurityPolicy("n", false));
+  });
+});
+
 describe("cspNonce", () => {
   it("is fresh every call — a repeated nonce is not a nonce", () => {
     const seen = new Set(Array.from({ length: 500 }, () => cspNonce()));

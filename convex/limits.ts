@@ -41,3 +41,63 @@ export const MEAL_TALLY_READ_LIMIT = 500;
  * labels, so reaching this needs a long history of menu changes.
  */
 export const MEAL_TALLY_REBUILD_LIMIT = 2048;
+
+/* ------------------------------------------------------------ photo wall */
+
+/** How many photos one upload batch may hold. */
+export const PHOTO_BATCH_MAX = 10;
+
+/** The largest original the site will open a Drive upload for. */
+export const PHOTO_ORIGINAL_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * The largest web copy accepted into Convex storage.
+ *
+ * A copy is ~1600px on its long edge and lands well under 300 KB; this is a
+ * ceiling against a client that skips the resize, not a target.
+ */
+export const PHOTO_WEB_MAX_BYTES = 1.5 * 1024 * 1024;
+
+/**
+ * Long edge of a web copy, in pixels. The phone resizes to this.
+ *
+ * Two sizes, by where the original goes. With Google Drive keeping the
+ * original, the copy only has to look good on a phone. With "this site"
+ * the copy is all there is, so it is made large enough to print well up
+ * to about 8x10 — roughly 350 KB instead of 150.
+ */
+export const PHOTO_WEB_MAX_EDGE_DRIVE = 1600;
+export const PHOTO_WEB_MAX_EDGE_SITE = 2400;
+
+/**
+ * How much the site's own storage may hold in web copies, in bytes.
+ *
+ * Convex's free plan includes 1 GB of file storage; this keeps the wall
+ * well inside it. At the cap, uploads stop and the hosts are told; deleting
+ * photos makes room. Counted on the totals row, so checking it is one read.
+ */
+export const PHOTO_STORAGE_CAP_BYTES = 500 * 1024 * 1024;
+
+/** A width or height past this is not a photo the wall can lay out. */
+export const PHOTO_MAX_DIMENSION = 8000;
+
+/** Photos per wall page, from the first server render and each scroll. */
+export const PHOTO_PAGE_SIZE = 24;
+
+/** The optional name shown under a guest's photos. */
+export const PHOTO_UPLOADER_NAME_MAX = 60;
+
+/**
+ * How many bytes of originals may be on their way to Drive — opened and not
+ * yet recorded — across the whole site, over the window below.
+ *
+ * This is what tells a party apart from a script. A hundred and fifty
+ * guests with three 5 MB uploads in flight each hold about 2 GB open at
+ * the busiest moment, and each upload leaves the count within seconds of
+ * landing. A script that opens uploads and never records them holds its
+ * bytes for the whole window, and stops at the budget: at most this much
+ * of the hosts' Drive can ever be filled with unrecorded files, and the
+ * folder reconcile takes those back.
+ */
+export const PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
+export const PHOTO_DRIVE_INFLIGHT_WINDOW_MS = 30 * 60 * 1000;
