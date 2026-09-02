@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PhotoViewer } from "@/components/PhotoViewer";
+import { PhotoViewer, type ViewerAction } from "@/components/PhotoViewer";
 import {
   Alert,
   Badge,
@@ -151,14 +151,33 @@ export function PhotoWall({
 
   /* ----------------------------------------------------------- actions */
 
-  const canRemove = useCallback(
-    (photo: PhotoView) => mode === "host" || photo.mine,
-    [mode]
-  );
-
   function ask(kind: Confirm["kind"], photo: PhotoView) {
     setConfirm({ kind, photo });
     dialogRef.current?.showModal();
+  }
+
+  /**
+   * What the viewer offers for a photo. A guest can remove their own; a host
+   * can hide or restore, and delete for good — the same set as on the tile,
+   * so nothing is reachable from one place and not the other.
+   */
+  function viewerActions(photo: PhotoView): ViewerAction[] {
+    if (mode === "guest") {
+      return photo.mine
+        ? [{ label: t.remove, icon: <TrashIcon />, onClick: () => ask("remove", photo) }]
+        : [];
+    }
+    return [
+      photo.status === "hidden"
+        ? { label: t.restore, onClick: () => void restore(photo) }
+        : { label: t.hostHide, onClick: () => void hideAsHost(photo) },
+      {
+        label: t.deleteForever,
+        icon: <TrashIcon />,
+        tone: "danger",
+        onClick: () => ask("delete", photo),
+      },
+    ];
   }
 
   function dropFromList(id: string) {
@@ -179,17 +198,10 @@ export function PhotoWall({
           setNotice({ tone: "critical", text: t.driveNotDeleted });
         }
       } else {
+        // Only a guest reaches here: a host's hide goes through hideAsHost.
         await hidePhoto(photo.id);
-        if (mode === "guest" || filter === "live") {
-          dropFromList(photo.id);
-          if (mode === "guest") setNotice({ tone: "positive", text: t.removed });
-        } else {
-          setPhotos((current) =>
-            current.map((p) =>
-              p.id === photo.id ? { ...p, status: "hidden", hiddenBy: "host" } : p
-            )
-          );
-        }
+        dropFromList(photo.id);
+        setNotice({ tone: "positive", text: t.removed });
       }
       if (viewing !== null && photos.length <= 1) setViewing(null);
       refreshHostPage();
@@ -199,6 +211,31 @@ export function PhotoWall({
       setBusy(false);
       dialogRef.current?.close();
       setConfirm(null);
+    }
+  }
+
+  /**
+   * A host's hide needs no confirmation: it is reversible from the same
+   * page, and the guest-worded "Remove this photo?" dialog would be wrong
+   * for a host anyway. Delete for good still asks.
+   */
+  async function hideAsHost(photo: PhotoView) {
+    setBusy(true);
+    try {
+      await hidePhoto(photo.id);
+      if (filter === "live") dropFromList(photo.id);
+      else {
+        setPhotos((current) =>
+          current.map((p) =>
+            p.id === photo.id ? { ...p, status: "hidden", hiddenBy: "host", hiddenAt: Date.now() } : p
+          )
+        );
+      }
+      refreshHostPage();
+    } catch (error) {
+      setNotice({ tone: "critical", text: messageFor(error, t) });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -265,9 +302,8 @@ export function PhotoWall({
                     height={h}
                     mode={mode}
                     busy={busy}
-                    canRemove={canRemove(photo)}
                     onOpen={() => setViewing(photos.indexOf(photo))}
-                    onRemove={() => ask("remove", photo)}
+                    onRemove={() => (mode === "host" ? void hideAsHost(photo) : ask("remove", photo))}
                     onDelete={() => ask("delete", photo)}
                     onRestore={() => restore(photo)}
                     t={t}
@@ -306,8 +342,7 @@ export function PhotoWall({
           onIndex={setViewing}
           onClose={() => setViewing(null)}
           onNearEnd={loadMore}
-          canRemove={canRemove}
-          onRemove={(photo) => ask(mode === "host" ? "delete" : "remove", photo)}
+          actionsFor={viewerActions}
           t={t}
           locale={locale}
         />
@@ -354,7 +389,6 @@ function Tile({
   height,
   mode,
   busy,
-  canRemove,
   onOpen,
   onRemove,
   onDelete,
@@ -366,7 +400,6 @@ function Tile({
   height: number;
   mode: Mode;
   busy: boolean;
-  canRemove: boolean;
   onOpen: () => void;
   onRemove: () => void;
   onDelete: () => void;
@@ -409,7 +442,7 @@ function Tile({
         </span>
       ) : null}
 
-      {mode === "guest" && canRemove ? (
+      {mode === "guest" && photo.mine ? (
         <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
           <Badge tone="neutral" className="bg-surface/95">
             {t.yours}
@@ -433,7 +466,9 @@ function Tile({
               {photo.hiddenBy === "host" ? t.hiddenByHost : t.hiddenByGuest}
             </Badge>
           ) : null}
-          <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          {/* Always visible: a control that only appears on hover is one a
+              host on a phone never finds, and on a laptop is easy to miss. */}
+          <div className="absolute bottom-1.5 right-1.5 flex gap-1">
             {hidden ? (
               <button type="button" onClick={onRestore} disabled={busy} className={control}>
                 {t.restore}

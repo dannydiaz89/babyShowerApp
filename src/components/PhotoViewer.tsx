@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, TrashIcon } from "@/components/ui";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "@/components/ui";
 import { fill } from "@/lib/i18n/text";
 import type { PhotoView, PhotosText } from "@/lib/photo-client";
 
@@ -15,14 +15,22 @@ import type { PhotoView, PhotosText } from "@/lib/photo-client";
  *
  * The one dark surface in the app: a photograph reads best against it.
  */
+/** One thing the reader may do to the photo on screen. */
+export type ViewerAction = {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  /** Destructive actions are marked so the eye can tell them apart. */
+  tone?: "neutral" | "danger";
+};
+
 export function PhotoViewer({
   photos,
   index,
   onIndex,
   onClose,
   onNearEnd,
-  canRemove,
-  onRemove,
+  actionsFor,
   t,
   locale,
 }: {
@@ -32,8 +40,8 @@ export function PhotoViewer({
   onClose: () => void;
   /** Called when the reader is a few photos from the last one loaded. */
   onNearEnd: () => void;
-  canRemove: (photo: PhotoView) => boolean;
-  onRemove: (photo: PhotoView) => void;
+  /** What this reader may do to a given photo: remove, hide, restore, delete. */
+  actionsFor: (photo: PhotoView) => ViewerAction[];
   t: PhotosText;
   locale: string;
 }) {
@@ -192,16 +200,19 @@ export function PhotoViewer({
           >
             {t.openFull}
           </a>
-          {canRemove(photo) ? (
+          {actionsFor(photo).map((action) => (
             <button
+              key={action.label}
               type="button"
-              onClick={() => onRemove(photo)}
-              className="inline-flex items-center gap-2 rounded-md bg-on-viewer/15 px-3.5 py-2.5 text-sm font-medium text-on-viewer hover:bg-on-viewer/25"
+              onClick={action.onClick}
+              className={`inline-flex items-center gap-2 rounded-md px-3.5 py-2.5 text-sm font-medium text-on-viewer hover:bg-on-viewer/25 ${
+                action.tone === "danger" ? "bg-danger/60" : "bg-on-viewer/15"
+              }`}
             >
-              <TrashIcon />
-              {t.remove}
+              {action.icon}
+              {action.label}
             </button>
-          ) : null}
+          ))}
         </div>
         <p className="mt-3 text-center text-[0.7rem] text-on-viewer-muted">{t.tapToToggle}</p>
       </div>
