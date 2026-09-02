@@ -11,6 +11,7 @@ import {
   Hint,
   Input,
   Label,
+  PhotoIcon,
   ProgressBar,
 } from "@/components/ui";
 import { fill } from "@/lib/i18n/text";
@@ -19,6 +20,7 @@ import {
   finalizeUpload,
   messageFor,
   openUploadSession,
+  PhotoApiError,
   putToDrive,
   type PhotosText,
 } from "@/lib/photo-client";
@@ -51,7 +53,13 @@ type Item = {
   controller: AbortController | null;
 };
 
-type Phase = "pick" | "uploading" | "finished";
+/**
+ * "paused" is the site saying no to the whole batch — storage not ready —
+ * rather than one photo failing: everything in flight is cancelled and the
+ * guest is sent back to the wall to try later, in the same state as anyone
+ * arriving now.
+ */
+type Phase = "pick" | "uploading" | "finished" | "paused";
 
 const CONCURRENCY = 3;
 const NAME_KEY = "bs_photo_name";
@@ -76,16 +84,23 @@ function rememberName(name: string) {
 export function PhotoUploader({
   max,
   maxBytes,
-  driveConnected,
+  maxEdge,
+  keepsOriginals,
   t,
 }: {
   max: number;
   maxBytes: number;
-  driveConnected: boolean;
+  /** Long edge of the web copy, by where originals go. */
+  maxEdge: number;
+  /** Whether originals are kept (Google Drive) or only the web copy (this site). */
+  keepsOriginals: boolean;
   t: PhotosText;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [phase, setPhase] = useState<Phase>("pick");
+  const [pausedFull, setPausedFull] = useState(false);
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
   const [name, setName] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
   const [desktop, setDesktop] = useState(false);
@@ -131,7 +146,7 @@ export function PhotoUploader({
     async (batch: Item[]) => {
       for (const item of batch) {
         try {
-          const prepared = await prepareImage(item.file);
+          const prepared = await prepareImage(item.file, maxEdge);
           patch(item.key, {
             prepared,
             thumbUrl: URL.createObjectURL(prepared.thumb),
@@ -146,8 +161,15 @@ export function PhotoUploader({
         }
       }
     },
-    [patch, t]
+    [patch, t, maxEdge]
   );
+
+  /** The site refused the batch as a whole: stop everything and send the guest back. */
+  function pauseBatch(full: boolean) {
+    for (const item of itemsRef.current) item.controller?.abort();
+    setPausedFull(full);
+    setPhase("paused");
+  }
 
   function pick(list: FileList | File[] | null) {
     if (!list) return;
@@ -232,6 +254,13 @@ export function PhotoUploader({
       patch(item.key, { status: "done", controller: null });
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (
+        error instanceof PhotoApiError &&
+        (error.code === "paused" || error.code === "storage-full")
+      ) {
+        pauseBatch(error.code === "storage-full");
+        return;
+      }
       patch(item.key, { status: "failed", controller: null, error: messageFor(error, t) });
     }
   }
@@ -274,7 +303,7 @@ export function PhotoUploader({
 
     setItems((current) => {
       const unfinished = current.some((i) => i.status === "failed" || i.status === "queued");
-      setPhase(unfinished ? "uploading" : "finished");
+      setPhase((phase) => (phase === "paused" ? phase : unfinished ? "uploading" : "finished"));
       return current;
     });
   }
@@ -298,6 +327,25 @@ export function PhotoUploader({
   const percent = Math.round(progress * 100);
 
   /* ----------------------------------------------------------- render */
+
+  if (phase === "paused") {
+    return (
+      <div className="rounded-xl border border-border bg-surface px-6 py-10 text-center shadow-raised">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-md bg-surface-sunken text-ink-muted">
+          <PhotoIcon className="h-6 w-6" />
+        </span>
+        <p className="mt-4 font-display text-2xl text-ink">{t.pausedTitle}</p>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-ink-muted">
+          {pausedFull ? t.pausedBodyFull : t.pausedBody}
+        </p>
+        <div className="mt-6 flex justify-center">
+          <ButtonLink href="/photos" variant="primary">
+            {t.seeWall}
+          </ButtonLink>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "finished") {
     return (
@@ -455,7 +503,7 @@ export function PhotoUploader({
 
         <p className="mt-2.5 text-center text-xs text-ink-muted">
           {inFlight ? `${t.keepOpen} ` : ""}
-          {driveConnected ? t.originalsNote : t.originalsNoteNoDrive}
+          {keepsOriginals ? t.originalsNote : t.originalsNoteNoDrive}
         </p>
       </div>
     </div>

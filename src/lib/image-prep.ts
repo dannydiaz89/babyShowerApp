@@ -8,7 +8,7 @@
  * The arithmetic is separated from the browser calls so it can be tested;
  * everything that needs a canvas is kept thin.
  */
-import { PHOTO_WEB_MAX_EDGE } from "../../convex/limits";
+import { PHOTO_WEB_MAX_EDGE_SITE } from "../../convex/limits";
 
 export type Size = { width: number; height: number };
 
@@ -108,7 +108,7 @@ function encode(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
 
 export async function prepareImage(
   file: File,
-  maxEdge: number = PHOTO_WEB_MAX_EDGE
+  maxEdge: number = PHOTO_WEB_MAX_EDGE_SITE
 ): Promise<PreparedImage> {
   const img = await load(file);
   const natural = { width: img.naturalWidth, height: img.naturalHeight };

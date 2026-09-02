@@ -50,6 +50,48 @@ export const set = mutation({
   },
 });
 
+/**
+ * Record whether Google answered.
+ *
+ * A failure keeps the first `failedAt` so the hosts see when it started,
+ * not merely when it was last noticed; a success clears everything but
+ * the check time. Reconnecting (`set`) replaces the row and so clears it.
+ */
+export const setHealth = mutation({
+  args: {
+    key: v.string(),
+    health: v.union(v.literal("ok"), v.literal("failing")),
+    kind: v.optional(v.union(v.literal("unavailable"), v.literal("revoked"))),
+    message: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { key, health, kind, message }) => {
+    assertServer(key);
+    const existing = await connectionRow(ctx);
+    if (!existing) return null;
+
+    const now = Date.now();
+    if (health === "ok") {
+      await ctx.db.patch(existing._id, {
+        health: "ok",
+        failureKind: undefined,
+        failureMessage: undefined,
+        failedAt: undefined,
+        lastCheckedAt: now,
+      });
+    } else {
+      await ctx.db.patch(existing._id, {
+        health: "failing",
+        failureKind: kind ?? "unavailable",
+        failureMessage: message?.slice(0, 500),
+        failedAt: existing.health === "failing" ? (existing.failedAt ?? now) : now,
+        lastCheckedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
 export const clear = mutation({
   args: { key: v.string() },
   returns: v.null(),

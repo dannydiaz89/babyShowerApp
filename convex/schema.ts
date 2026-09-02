@@ -121,6 +121,14 @@ export default defineSchema({
     ),
     photoWallClosesISO: v.optional(v.string()),
 
+    /*
+     * Where a photo's original goes. "site": nowhere — the site keeps a
+     * larger web copy and that is all, inside PHOTO_STORAGE_CAP_BYTES.
+     * "drive": the hosts' Google Drive, full quality. Optional: rows from
+     * before the choice existed read as "site", which works with no setup.
+     */
+    photoStorage: v.optional(v.union(v.literal("site"), v.literal("drive"))),
+
     updatedAt: v.number(),
   }).index("by_singleton", ["singleton"]),
 
@@ -169,6 +177,8 @@ export default defineSchema({
     singleton: v.literal("photos"),
     live: v.number(),
     hidden: v.number(),
+    /** Web-copy bytes across live and hidden photos, against the storage cap. Optional: older rows read as 0. */
+    bytes: v.optional(v.number()),
   }).index("by_singleton", ["singleton"]),
 
   /**
@@ -187,6 +197,18 @@ export default defineSchema({
     folderUrl: v.string(),
     refreshTokenSealed: v.string(),
     connectedAt: v.number(),
+
+    /*
+     * Whether Google last answered. A failure recorded here pauses uploads
+     * until a later probe succeeds ("unavailable": Google down, a timeout)
+     * or the hosts reconnect ("revoked": the grant is gone and retrying
+     * cannot help). Absent means healthy.
+     */
+    health: v.optional(v.union(v.literal("ok"), v.literal("failing"))),
+    failureKind: v.optional(v.union(v.literal("unavailable"), v.literal("revoked"))),
+    failureMessage: v.optional(v.string()),
+    failedAt: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
   }).index("by_singleton", ["singleton"]),
 
   /**

@@ -10,6 +10,10 @@ export const PHOTO_ERROR_CODES = [
   "signed-out",
   /** The hosts have not opened the wall, or have closed uploads. */
   "closed",
+  /** Uploads are paused: Drive is failing or not connected, or the site's storage is full. */
+  "paused",
+  /** The site's storage for web copies has reached its cap. */
+  "storage-full",
   /** Too many requests from this device; try later. */
   "rate-limited",
   /** The file is over the size limit. */

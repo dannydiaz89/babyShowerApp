@@ -5,6 +5,7 @@ import { paginationOptsValidator, paginationResultValidator } from "convex/serve
 import { assertServer } from "./guard";
 import {
   PHOTO_MAX_DIMENSION,
+  PHOTO_STORAGE_CAP_BYTES,
   PHOTO_UPLOADER_NAME_MAX,
   PHOTO_WEB_MAX_BYTES,
 } from "./limits";
@@ -59,8 +60,13 @@ export type PhotoView = {
 const filter = v.union(v.literal("live"), v.literal("hidden"), v.literal("all"));
 export type WallFilter = "live" | "hidden" | "all";
 
-const totalsValidator = v.object({ live: v.number(), hidden: v.number() });
-export type PhotoTotals = { live: number; hidden: number };
+const totalsValidator = v.object({
+  live: v.number(),
+  hidden: v.number(),
+  /** Web-copy bytes in the site's storage, live and hidden together. */
+  bytes: v.number(),
+});
+export type PhotoTotals = { live: number; hidden: number; bytes: number };
 
 /* ------------------------------------------------------------------ totals */
 
@@ -80,14 +86,15 @@ async function totalsRow(ctx: QueryCtx) {
  */
 async function adjustTotals(
   ctx: MutationCtx,
-  delta: { live?: number; hidden?: number }
+  delta: { live?: number; hidden?: number; bytes?: number }
 ): Promise<void> {
   const existing = await totalsRow(ctx);
   const live = Math.max(0, (existing?.live ?? 0) + (delta.live ?? 0));
   const hidden = Math.max(0, (existing?.hidden ?? 0) + (delta.hidden ?? 0));
+  const bytes = Math.max(0, (existing?.bytes ?? 0) + (delta.bytes ?? 0));
 
-  if (existing) await ctx.db.patch(existing._id, { live, hidden });
-  else await ctx.db.insert("photoTotals", { singleton: "photos", live, hidden });
+  if (existing) await ctx.db.patch(existing._id, { live, hidden, bytes });
+  else await ctx.db.insert("photoTotals", { singleton: "photos", live, hidden, bytes });
 }
 
 /* -------------------------------------------------------------------- view */
@@ -135,7 +142,15 @@ export const generateUploadUrl = mutation({
 
 const createResult = v.union(
   v.object({ ok: v.literal(true), photo: photoView }),
-  v.object({ ok: v.literal(false), reason: v.string() })
+  v.object({
+    ok: v.literal(false),
+    reason: v.union(
+      v.literal("not-uploaded"),
+      v.literal("too-large"),
+      v.literal("bad-dimensions"),
+      v.literal("storage-full")
+    ),
+  })
 );
 
 /**
@@ -167,10 +182,21 @@ export const create = mutation({
     assertServer(key);
 
     const file = await ctx.db.system.get("_storage", args.webStorageId);
-    if (!file) return { ok: false as const, reason: "The web copy was not uploaded." };
+    if (!file) return { ok: false as const, reason: "not-uploaded" as const };
     if (file.size > PHOTO_WEB_MAX_BYTES) {
       await ctx.storage.delete(args.webStorageId);
-      return { ok: false as const, reason: "The web copy is too large." };
+      return { ok: false as const, reason: "too-large" as const };
+    }
+
+    /*
+     * The storage cap, checked here where the row and the counter change
+     * together: two uploads racing past it on the route side would both
+     * be let through, but this runs in a transaction and only one wins.
+     */
+    const totals = await totalsRow(ctx);
+    if ((totals?.bytes ?? 0) + file.size > PHOTO_STORAGE_CAP_BYTES) {
+      await ctx.storage.delete(args.webStorageId);
+      return { ok: false as const, reason: "storage-full" as const };
     }
 
     const width = Math.round(args.width);
@@ -184,7 +210,7 @@ export const create = mutation({
       height > PHOTO_MAX_DIMENSION
     ) {
       await ctx.storage.delete(args.webStorageId);
-      return { ok: false as const, reason: "The photo dimensions are not usable." };
+      return { ok: false as const, reason: "bad-dimensions" as const };
     }
 
     const uploaderName = args.uploaderName?.trim().slice(0, PHOTO_UPLOADER_NAME_MAX);
@@ -201,7 +227,7 @@ export const create = mutation({
       originalName: args.originalName?.slice(0, 255),
       originalBytes: args.originalBytes,
     });
-    await adjustTotals(ctx, { live: 1 });
+    await adjustTotals(ctx, { live: 1, bytes: file.size });
 
     const view = await toView(ctx, (await ctx.db.get(id))!, args.uploaderId);
     if (!view) throw new Error("The photo could not be read back.");
@@ -253,7 +279,7 @@ export const totals = query({
   handler: async (ctx, { key }) => {
     assertServer(key);
     const row = await totalsRow(ctx);
-    return { live: row?.live ?? 0, hidden: row?.hidden ?? 0 };
+    return { live: row?.live ?? 0, hidden: row?.hidden ?? 0, bytes: row?.bytes ?? 0 };
   },
 });
 
@@ -330,7 +356,10 @@ export const remove = mutation({
 
     await ctx.storage.delete(photo.webStorageId);
     await ctx.db.delete(id);
-    await adjustTotals(ctx, photo.status === "live" ? { live: -1 } : { hidden: -1 });
+    await adjustTotals(ctx, {
+      ...(photo.status === "live" ? { live: -1 } : { hidden: -1 }),
+      bytes: -photo.webBytes,
+    });
 
     return { driveFileId: photo.driveFileId ?? null };
   },

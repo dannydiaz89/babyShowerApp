@@ -6,7 +6,7 @@ import {
   PHOTO_WEB_MAX_BYTES,
 } from "../../../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
-import { DriveError, verifyUploadedFile } from "@/lib/google-drive";
+import { recordDriveFailure, verifyUploadedFile } from "@/lib/google-drive";
 import {
   ensureUploaderId,
   loadWallPage,
@@ -76,6 +76,7 @@ export async function POST(request: Request) {
   if (!caller.role) return refuse("signed-out", 401);
 
   const state = await wallState();
+  if (state.paused) return refuse(state.paused === "storage-full" ? "storage-full" : "paused", 503);
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
       driveFileId = claimedDriveId;
     } catch (error) {
       console.error("Verifying the Drive upload failed", error);
-      return refuse("drive", error instanceof DriveError && error.kind === "revoked" ? 409 : 502);
+      await recordDriveFailure(error);
+      return refuse("paused", 503);
     }
   }
 
@@ -132,7 +134,9 @@ export async function POST(request: Request) {
       originalBytes,
     });
 
-    if (!result.ok) return refuse("bad-request", 400);
+    if (!result.ok) {
+      return refuse(result.reason === "storage-full" ? "storage-full" : "bad-request", result.reason === "storage-full" ? 503 : 400);
+    }
     return NextResponse.json({ photo: result.photo }, { status: 201 });
   } catch (error) {
     console.error("Recording a photo failed", error);

@@ -3,16 +3,24 @@ import { cookies } from "next/headers";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { cache } from "react";
 import type { PhotoTotals, PhotoView, WallFilter } from "../../convex/photos";
-import { PHOTO_PAGE_SIZE } from "../../convex/limits";
+import {
+  PHOTO_PAGE_SIZE,
+  PHOTO_STORAGE_CAP_BYTES,
+  PHOTO_WEB_MAX_EDGE_DRIVE,
+  PHOTO_WEB_MAX_EDGE_SITE,
+} from "../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
+import type { PhotoStorage } from "@/lib/defaults";
+import { getDriveConnection, googleConfigured, maybeReprobe } from "@/lib/google-drive";
 import {
   UPLOADER_COOKIE,
   isUploaderId,
   newUploaderId,
   uploaderCookieOptions,
 } from "@/lib/photo-device";
-import { photoWallState, type WallState } from "@/lib/photo-wall";
+import { photoWallState, withStorage, type StorageStatus, type WallState } from "@/lib/photo-wall";
 import { hasGuestAccess, isAdminSession } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 
@@ -64,10 +72,46 @@ export async function photoCaller(): Promise<Caller> {
 
 /* ---------------------------------------------------------------- state */
 
-/** Whether the wall is showing and taking uploads, from the hosts' settings and today's date. */
-export async function wallState(): Promise<WallState> {
+/** How large a web copy the phone makes, by where the original goes. */
+export function webMaxEdgeFor(storage: PhotoStorage): number {
+  return storage === "drive" ? PHOTO_WEB_MAX_EDGE_DRIVE : PHOTO_WEB_MAX_EDGE_SITE;
+}
+
+/**
+ * Where things stand with the storage behind the wall, for the pause rule
+ * and the hosts' notices. Memoised per request: the header, the page and a
+ * route can each ask.
+ *
+ * A failing-but-recoverable Drive connection is re-probed here once its
+ * interval has passed, so an outage on Google's side clears itself on the
+ * next page load after it ends, with no host involved.
+ */
+export const storageStatus = cache(async (): Promise<StorageStatus> => {
   const settings = await getSettings();
-  return photoWallState(
+  const [connection, totals] = await Promise.all([
+    settings.photoStorage === "drive" && googleConfigured()
+      ? getDriveConnection().then((c) => (c ? maybeReprobe(c) : null))
+      : Promise.resolve(null),
+    loadTotals().catch((error) => {
+      console.error("Reading the photo totals failed", error);
+      return { live: 0, hidden: 0, bytes: 0 };
+    }),
+  ]);
+  return {
+    storage: settings.photoStorage,
+    drive: connection ? { health: connection.health, failureKind: connection.failureKind } : null,
+    bytes: totals.bytes,
+    cap: PHOTO_STORAGE_CAP_BYTES,
+  };
+});
+
+/**
+ * Whether the wall is showing and taking uploads: the hosts' settings and
+ * today's date first, then whether the storage behind it is ready.
+ */
+export const wallState = cache(async (): Promise<WallState> => {
+  const settings = await getSettings();
+  const base = photoWallState(
     {
       mode: settings.photoWall,
       startISO: settings.startISO,
@@ -76,7 +120,10 @@ export async function wallState(): Promise<WallState> {
     },
     new Date()
   );
-}
+  // Nothing to pause when the wall is not taking uploads anyway.
+  if (!base.uploads) return base;
+  return withStorage(base, await storageStatus());
+});
 
 /* -------------------------------------------------------------- reading */
 

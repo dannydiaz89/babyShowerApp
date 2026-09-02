@@ -1,8 +1,10 @@
 import { AdminHeader } from "@/components/SiteHeader";
 import { PhotoWall } from "@/components/PhotoWall";
+import { StorageNotice } from "@/components/StorageNotice";
 import { Alert, ButtonLink, PageTitle } from "@/components/ui";
+import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
 import { fill, getTranslation } from "@/lib/i18n";
-import { loadTotals, loadWallPage, type WallFilter } from "@/lib/photos";
+import { loadTotals, loadWallPage, storageStatus, wallState, type WallFilter } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 
 /*
@@ -33,7 +35,7 @@ export default async function AdminPhotosPage({
   const filter = filterParam(params.filter);
 
   let page: Awaited<ReturnType<typeof loadWallPage>> | null = null;
-  let totals = { live: 0, hidden: 0 };
+  let totals = { live: 0, hidden: 0, bytes: 0 };
   try {
     [page, totals] = await Promise.all([
       loadWallPage({ filter, cursor: null, viewerId: null }),
@@ -42,6 +44,14 @@ export default async function AdminPhotosPage({
   } catch (error) {
     console.error("Loading the photo wall failed", error);
   }
+
+  const [wall, status, connection] = await Promise.all([
+    wallState(),
+    storageStatus(),
+    settings.photoStorage === "drive" && googleConfigured()
+      ? getDriveConnection().catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
   const counts: Record<WallFilter, number> = {
     all: totals.live + totals.hidden,
@@ -65,6 +75,16 @@ export default async function AdminPhotosPage({
           <p className="mt-1 text-sm text-ink-muted">
             {fill(t.photos.stats, { live: totals.live, hidden: totals.hidden })}
           </p>
+
+          <div className="mt-4 max-w-xl">
+            <StorageNotice
+              status={status}
+              paused={wall.paused}
+              connection={connection}
+              t={t}
+              locale={locale}
+            />
+          </div>
 
           <nav aria-label={t.photos.filterLabel} className="mt-5 flex flex-wrap gap-2">
             {FILTERS.map((name) => (

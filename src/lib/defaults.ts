@@ -22,6 +22,15 @@ export type Registry = {
 export const PHOTO_WALL_MODES = ["auto", "open"] as const;
 export type PhotoWallMode = (typeof PHOTO_WALL_MODES)[number];
 
+/**
+ * Where a photo's original goes. "site" keeps only a larger web copy in the
+ * site's own storage — no setup, but a cap; "drive" keeps the original in
+ * the hosts' Google Drive. The web copy lives in the site's storage either
+ * way; this is only about the original.
+ */
+export const PHOTO_STORAGE_OPTIONS = ["site", "drive"] as const;
+export type PhotoStorage = (typeof PHOTO_STORAGE_OPTIONS)[number];
+
 export type Settings = {
   babyName: string;
   honorees: string;
@@ -51,6 +60,7 @@ export type Settings = {
    * if that changes. See src/lib/photo-wall.ts.
    */
   photoWallClosesISO: string;
+  photoStorage: PhotoStorage;
 };
 
 /** Swatches offered for registry cards. Fixed so Tailwind can see the classes. */
@@ -120,4 +130,5 @@ export const DEFAULT_SETTINGS: Settings = {
   collectPhone: true,
   photoWall: "auto",
   photoWallClosesISO: "",
+  photoStorage: "site",
 };

@@ -35,6 +35,7 @@ export const editable = v.object({
   collectPhone: v.boolean(),
   photoWall: v.union(v.literal("auto"), v.literal("open")),
   photoWallClosesISO: v.string(),
+  photoStorage: v.union(v.literal("site"), v.literal("drive")),
 });
 
 /** The one settings row, or null if the hosts have never saved. */

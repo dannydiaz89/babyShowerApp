@@ -3,9 +3,8 @@ import { GuestHeader } from "@/components/SiteHeader";
 import { PhotoUploader } from "@/components/PhotoUploader";
 import { PageTitle } from "@/components/ui";
 import { PHOTO_BATCH_MAX, PHOTO_ORIGINAL_MAX_BYTES } from "../../../../convex/limits";
-import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
 import { getTranslation } from "@/lib/i18n";
-import { wallState } from "@/lib/photos";
+import { wallState, webMaxEdgeFor } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
@@ -21,18 +20,10 @@ export default async function AddPhotosPage() {
     wallState(),
   ]);
 
-  // Closed to guests; a host can still test the flow.
-  if (!wall.uploads && !previewing) redirect(wall.visible ? "/photos" : "/invitation");
-
-  // Only decides which note the guest reads under the button; the upload
-  // itself asks again per photo, so a connection made mid-batch still counts.
-  let driveConnected = false;
-  if (googleConfigured()) {
-    try {
-      driveConnected = (await getDriveConnection()) !== null;
-    } catch (error) {
-      console.error("Reading the Drive connection failed", error);
-    }
+  // A pause holds for everyone, hosts included: the storage is not ready.
+  // A merely closed wall a host can still test.
+  if (wall.paused || (!wall.uploads && !previewing)) {
+    redirect(wall.visible ? "/photos" : "/invitation");
   }
 
   return (
@@ -63,7 +54,8 @@ export default async function AddPhotosPage() {
         <PhotoUploader
           max={PHOTO_BATCH_MAX}
           maxBytes={PHOTO_ORIGINAL_MAX_BYTES}
-          driveConnected={driveConnected}
+          maxEdge={webMaxEdgeFor(settings.photoStorage)}
+          keepsOriginals={settings.photoStorage === "drive"}
           t={t.photos}
         />
       </main>

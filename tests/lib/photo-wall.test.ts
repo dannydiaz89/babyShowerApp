@@ -6,7 +6,10 @@ import {
   eventDateISO,
   localDateISO,
   localDateTimeISO,
+  pauseReason,
   photoWallState,
+  withStorage,
+  type StorageStatus,
 } from "../../src/lib/photo-wall";
 
 /**
@@ -100,27 +103,27 @@ describe("local time", () => {
 describe("photoWallState in auto mode", () => {
   it("stays closed the evening before, even once it is the event date in UTC", () => {
     const state = photoWallState(wall("auto"), new Date("2026-10-18T05:30:00Z"), LA);
-    expect(state).toEqual({ visible: false, uploads: false });
+    expect(state).toEqual({ visible: false, uploads: false, paused: null });
   });
 
   it("opens at local midnight on the event date", () => {
     // 07:00 UTC is midnight PDT.
     const state = photoWallState(wall("auto"), new Date("2026-10-18T07:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
   });
 
   it("keeps taking photos in the week after the event when nothing is set", () => {
     // Three days on: the preset close is a week after the end.
     const state = photoWallState(wall("auto"), new Date("2026-10-21T12:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
   });
 
   it("closes to new photos a week after the event ends, and stays viewable", () => {
     // 2026-10-25T17:00 PDT is 00:00 UTC on the 26th.
     const before = photoWallState(wall("auto"), new Date("2026-10-25T23:59:00Z"), LA);
     const after = photoWallState(wall("auto"), new Date("2026-10-26T00:00:00Z"), LA);
-    expect(before).toEqual({ visible: true, uploads: true });
-    expect(after).toEqual({ visible: true, uploads: false });
+    expect(before).toEqual({ visible: true, uploads: true, paused: null });
+    expect(after).toEqual({ visible: true, uploads: false, paused: null });
   });
 
   it("cannot open on an unreadable start date", () => {
@@ -129,7 +132,7 @@ describe("photoWallState in auto mode", () => {
       new Date("2030-01-01T00:00:00Z"),
       LA
     );
-    expect(state).toEqual({ visible: false, uploads: false });
+    expect(state).toEqual({ visible: false, uploads: false, paused: null });
   });
 });
 
@@ -139,32 +142,32 @@ describe("photoWallState closing", () => {
   it("keeps taking photos until the closing moment", () => {
     // 04:59 UTC on the 20th is 21:59 PDT on the 19th.
     const state = photoWallState(wall("auto", closes), new Date("2026-10-20T04:59:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
   });
 
   it("stops uploads at that moment where the event is, and keeps the wall viewable", () => {
     // 05:00 UTC on the 20th is 22:00 PDT on the 19th.
     const state = photoWallState(wall("auto", closes), new Date("2026-10-20T05:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: false });
+    expect(state).toEqual({ visible: true, uploads: false, paused: null });
   });
 
   it("does not read the closing time as UTC", () => {
     // 22:00 UTC on the 19th is 15:00 PDT — seven hours early.
     const state = photoWallState(wall("auto", closes), new Date("2026-10-19T22:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
   });
 
   it("closes an opened-now wall the same way", () => {
     const state = photoWallState(wall("open", closes), new Date("2026-12-01T00:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: false });
+    expect(state).toEqual({ visible: true, uploads: false, paused: null });
   });
 
   it("uses the preset when the set time is blank or unreadable", () => {
     for (const bad of ["", "tonight", "2026-10-19"]) {
       const during = photoWallState(wall("open", bad), new Date("2026-10-20T00:00:00Z"), LA);
       const later = photoWallState(wall("open", bad), new Date("2030-01-01T00:00:00Z"), LA);
-      expect(during).toEqual({ visible: true, uploads: true });
-      expect(later).toEqual({ visible: true, uploads: false });
+      expect(during).toEqual({ visible: true, uploads: true, paused: null });
+      expect(later).toEqual({ visible: true, uploads: false, paused: null });
     }
   });
 
@@ -174,7 +177,7 @@ describe("photoWallState closing", () => {
       new Date("2030-01-01T00:00:00Z"),
       LA
     );
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
   });
 
   it("a close set before the event date leaves the wall never open for uploads", () => {
@@ -183,13 +186,76 @@ describe("photoWallState closing", () => {
       new Date("2026-10-18T20:00:00Z"),
       LA
     );
-    expect(state).toEqual({ visible: true, uploads: false });
+    expect(state).toEqual({ visible: true, uploads: false, paused: null });
   });
 });
 
 describe("photoWallState open mode", () => {
   it("open means open now, however early", () => {
     const state = photoWallState(wall("open"), new Date("2020-01-01T00:00:00Z"), LA);
-    expect(state).toEqual({ visible: true, uploads: true });
+    expect(state).toEqual({ visible: true, uploads: true, paused: null });
+  });
+});
+
+/**
+ * The storage behind the wall can stop uploads on its own: the site's
+ * storage at its cap, or Drive — when it is the chosen store — missing,
+ * failing, or revoked. A host who chose "this site" is never held up by
+ * Google.
+ */
+describe("pauseReason", () => {
+  const cap = 500;
+  const drive = (health: "ok" | "failing", failureKind: "unavailable" | "revoked" | null = null) => ({
+    health,
+    failureKind,
+  });
+
+  it("is nothing when the site's storage has room and Drive is not in play", () => {
+    expect(pauseReason({ storage: "site", drive: null, bytes: 100, cap })).toBeNull();
+  });
+
+  it("is storage-full at the cap, whichever store is chosen", () => {
+    expect(pauseReason({ storage: "site", drive: null, bytes: cap, cap })).toBe("storage-full");
+    expect(pauseReason({ storage: "drive", drive: drive("ok"), bytes: cap + 1, cap })).toBe("storage-full");
+  });
+
+  it("is drive-unconnected when Drive is chosen but nothing is connected", () => {
+    expect(pauseReason({ storage: "drive", drive: null, bytes: 0, cap })).toBe("drive-unconnected");
+  });
+
+  it("is drive-failing for an outage and drive-revoked for a refused grant", () => {
+    expect(pauseReason({ storage: "drive", drive: drive("failing", "unavailable"), bytes: 0, cap })).toBe("drive-failing");
+    expect(pauseReason({ storage: "drive", drive: drive("failing", "revoked"), bytes: 0, cap })).toBe("drive-revoked");
+  });
+
+  it("ignores a failing Drive when the hosts chose this site", () => {
+    expect(pauseReason({ storage: "site", drive: drive("failing", "revoked"), bytes: 0, cap })).toBeNull();
+  });
+
+  it("is nothing for a healthy, connected Drive", () => {
+    expect(pauseReason({ storage: "drive", drive: drive("ok"), bytes: 0, cap })).toBeNull();
+  });
+});
+
+describe("withStorage", () => {
+  const failing: StorageStatus = {
+    storage: "drive",
+    drive: { health: "failing", failureKind: "unavailable" },
+    bytes: 0,
+    cap: 500,
+  };
+
+  it("turns uploads off and names the reason while the wall would be taking them", () => {
+    const state = withStorage({ visible: true, uploads: true, paused: null }, failing);
+    expect(state).toEqual({ visible: true, uploads: false, paused: "drive-failing" });
+  });
+
+  it("keeps the wall viewable through a pause", () => {
+    expect(withStorage({ visible: true, uploads: true, paused: null }, failing).visible).toBe(true);
+  });
+
+  it("is not a pause when the wall is closed or not yet open anyway", () => {
+    expect(withStorage({ visible: true, uploads: false, paused: null }, failing).paused).toBeNull();
+    expect(withStorage({ visible: false, uploads: false, paused: null }, failing).paused).toBeNull();
   });
 });

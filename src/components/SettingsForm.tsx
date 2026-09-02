@@ -4,6 +4,9 @@ import { useActionState, useCallback, useEffect, useId, useRef, useState } from 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
+import { StorageNotice } from "@/components/StorageNotice";
+import type { DriveConnection } from "@/lib/google-drive";
+import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
 import {
   SETTINGS_TABS,
   type SettingsState,
@@ -31,6 +34,7 @@ import {
   cardClass,
 } from "@/components/ui";
 import {
+  PHOTO_STORAGE_OPTIONS,
   PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
   type Localized,
@@ -289,7 +293,13 @@ function Panel({
 export type DrivePanel = {
   /** GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set. */
   configured: boolean;
-  connection: { account: string; folderName: string; folderUrl: string } | null;
+  connection: DriveConnection | null;
+  /** Where the storage stands, for the meter and the pause notice. */
+  status: StorageStatus;
+  paused: PauseReason | null;
+  /** The site's storage cap, formatted. */
+  capLabel: string;
+  locale: string;
   /** Outcome of a connect or disconnect the host just came back from. */
   notice: { ok: boolean; text: string } | null;
   /** The event date, formatted, for the auto-open hint. */
@@ -803,6 +813,34 @@ export function SettingsForm({
             onDirty={() => setDirty(true)}
           >
             <fieldset>
+              <FieldsetLabel>{t.settings.storageTitle}</FieldsetLabel>
+              <div className="space-y-3">
+                {PHOTO_STORAGE_OPTIONS.map((option) => (
+                  <label key={option} className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="photoStorage"
+                      value={option}
+                      defaultChecked={settings.photoStorage === option}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-ink">
+                        {option === "site" ? t.settings.storageSite : t.settings.storageDrive}
+                      </span>
+                      <span className="block text-xs text-ink-muted">
+                        {option === "site"
+                          ? fill(t.settings.storageSiteHint, { cap: drive.capLabel })
+                          : t.settings.storageDriveHint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <Hint>{t.settings.storageSwitchNote}</Hint>
+            </fieldset>
+
+            <fieldset className="border-t border-border pt-5">
               <FieldsetLabel>{t.settings.wallMode}</FieldsetLabel>
               <div className="space-y-3">
                 {PHOTO_WALL_MODES.map((mode) => (
@@ -875,6 +913,15 @@ export function SettingsForm({
               </Alert>
             ) : null}
 
+            <StorageNotice
+              status={drive.status}
+              paused={drive.paused}
+              connection={drive.connection}
+              t={t}
+              locale={drive.locale}
+              withActions
+            />
+
             {!drive.configured ? (
               <p className="text-sm text-ink">{t.settings.driveUnconfigured}</p>
             ) : drive.connection ? (
@@ -892,7 +939,15 @@ export function SettingsForm({
                     <span className="sr-only"> ({t.registry.opensInNewTab})</span>
                   </a>
                 </p>
+                {drive.connection.health === "ok" && !drive.paused ? (
+                  <p className="text-xs text-success">{t.settings.driveHealthy}</p>
+                ) : null}
                 <div className="flex flex-wrap gap-3">
+                  <form method="post" action="/api/google/check">
+                    <Button type="submit" variant="secondary">
+                      {t.settings.driveCheck}
+                    </Button>
+                  </form>
                   <AnchorButton href="/api/google/start" variant="secondary">
                     {t.settings.driveReconnect}
                   </AnchorButton>

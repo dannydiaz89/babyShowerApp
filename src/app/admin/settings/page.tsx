@@ -1,9 +1,12 @@
 import { SettingsForm, type DrivePanel } from "@/components/SettingsForm";
 import { PageTitle } from "@/components/ui";
 import { AdminHeader } from "@/components/SiteHeader";
-import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
+import { PHOTO_STORAGE_CAP_BYTES } from "../../../../convex/limits";
+import { formatBytes } from "@/components/StorageNotice";
+import { getDriveConnection, googleConfigured, type DriveConnection } from "@/lib/google-drive";
 import { fill, formatDateShort, getTranslation } from "@/lib/i18n";
 import { defaultClosesISO } from "@/lib/photo-wall";
+import { storageStatus, wallState } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 import { SETTINGS_TABS, type SettingsTab } from "@/lib/settings-tabs";
 
@@ -27,15 +30,15 @@ export default async function SettingsPage({
     : "event";
 
   const configured = googleConfigured();
-  let connection: DrivePanel["connection"] = null;
+  let connection: DriveConnection | null = null;
   if (configured) {
     try {
-      const row = await getDriveConnection();
-      if (row) connection = { account: row.account, folderName: row.folderName, folderUrl: row.folderUrl };
+      connection = await getDriveConnection();
     } catch (error) {
       console.error("Reading the Drive connection failed", error);
     }
   }
+  const [status, wall] = await Promise.all([storageStatus(), wallState()]);
 
   // The word the Google routes send back, turned into a sentence.
   const notices: Record<string, { ok: boolean; text: string }> = {
@@ -47,6 +50,8 @@ export default async function SettingsPage({
     denied: { ok: false, text: t.settings.driveNoticeDenied },
     error: { ok: false, text: t.settings.driveNoticeError },
     unconfigured: { ok: false, text: t.settings.driveUnconfigured },
+    healthy: { ok: true, text: t.settings.driveNoticeHealthy },
+    stillfailing: { ok: false, text: t.settings.driveNoticeStillFailing },
   };
 
   const drive: DrivePanel = {
@@ -55,6 +60,10 @@ export default async function SettingsPage({
     notice: params.drive ? (notices[params.drive] ?? null) : null,
     eventDate: formatDateShort(settings.startISO, locale),
     defaultCloses: defaultClosesISO(settings.startISO, settings.endISO),
+    status,
+    paused: wall.paused,
+    capLabel: formatBytes(PHOTO_STORAGE_CAP_BYTES),
+    locale,
   };
 
   return (

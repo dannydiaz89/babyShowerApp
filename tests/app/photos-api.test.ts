@@ -40,15 +40,21 @@ vi.mock("@/lib/settings", () => ({ getSettings: async () => settings }));
 const openUploadSession = vi.fn();
 const verifyUploadedFile = vi.fn();
 const deleteFile = vi.fn();
+const recordDriveFailure = vi.fn();
+let driveConnection: Record<string, unknown> | null = null;
 vi.mock("@/lib/google-drive", () => ({
   DriveError: class DriveError extends Error {
     constructor(message: string, public readonly kind = "unavailable") {
       super(message);
     }
   },
+  googleConfigured: () => true,
+  getDriveConnection: async () => driveConnection,
+  maybeReprobe: async (c: unknown) => c,
   openUploadSession: (...args: unknown[]) => openUploadSession(...args),
   verifyUploadedFile: (...args: unknown[]) => verifyUploadedFile(...args),
   deleteFile: (...args: unknown[]) => deleteFile(...args),
+  recordDriveFailure: (...args: unknown[]) => recordDriveFailure(...args),
 }));
 
 // The web copy upload posts to a Convex URL; nothing here should reach the network.
@@ -69,16 +75,32 @@ const DEVICE = "0123456789abcdef0123456789abcdef";
 const OTHER = "ffffffffffffffffffffffffffffffff";
 const BASE = "http://localhost:3001";
 
-function open(mode: "auto" | "open" | "closed") {
+function open(mode: "auto" | "open" | "closed", storage: "site" | "drive" = "site") {
   // "closed" is an open wall whose closing time has passed.
   return {
     ...DEFAULT_SETTINGS,
     photoWall: mode === "closed" ? "open" : mode,
     photoWallClosesISO: mode === "closed" ? "2000-01-01T00:00" : "",
+    photoStorage: storage,
     isConfigured: true,
     available: true,
   };
 }
+
+const HEALTHY_DRIVE = {
+  account: "host@example.com",
+  folderId: "f",
+  folderName: "Photos",
+  folderUrl: "https://drive.example/f",
+  connectedAt: 0,
+  health: "ok",
+  failureKind: null,
+  failureMessage: null,
+  failedAt: null,
+  lastCheckedAt: null,
+};
+
+let totals = { live: 0, hidden: 0, bytes: 0 };
 
 function json(path: string, body: unknown): Request {
   return new Request(`${BASE}${path}`, {
@@ -97,6 +119,11 @@ function called(name: string) {
   return mutation.mock.calls.filter(([fn]) => getFunctionName(fn) === name);
 }
 
+/** The queries this route made, by Convex function name. */
+function queried(name: string) {
+  return query.mock.calls.filter(([fn]) => getFunctionName(fn) === name);
+}
+
 async function asGuest() {
   cookieJar.set(GUEST_COOKIE, await createToken("guest"));
 }
@@ -108,11 +135,14 @@ async function asHost() {
 beforeEach(() => {
   cookieJar.clear();
   settings = open("open");
+  driveConnection = null;
+  totals = { live: 0, hidden: 0, bytes: 0 };
   mutation.mockReset();
   query.mockReset();
   openUploadSession.mockReset();
   verifyUploadedFile.mockReset();
   deleteFile.mockReset();
+  recordDriveFailure.mockReset();
   fetchMock.mockClear();
 
   mutation.mockImplementation(async (fn: unknown) => {
@@ -132,7 +162,11 @@ beforeEach(() => {
         throw new Error("unexpected mutation");
     }
   });
-  query.mockResolvedValue({ page: [], continueCursor: "", isDone: true });
+  query.mockImplementation(async (fn: unknown) =>
+    getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "photos:totals"
+      ? totals
+      : { page: [], continueCursor: "", isDone: true }
+  );
   openUploadSession.mockResolvedValue({ sessionUrl: "https://www.googleapis.com/upload/x" });
   verifyUploadedFile.mockResolvedValue({ ok: true, size: 100 });
   deleteFile.mockResolvedValue(true);
@@ -177,6 +211,8 @@ describe("POST /api/photos/session", () => {
   });
 
   it("mints the device cookie on first use and passes the page origin to Drive", async () => {
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
     await asGuest();
 
     const response = await session.POST(json("/api/photos/session", SESSION_BODY));
@@ -195,6 +231,56 @@ describe("POST /api/photos/session", () => {
 
     await session.POST(json("/api/photos/session", SESSION_BODY));
     expect(cookieJar.get(UPLOADER_COOKIE)).toBe(DEVICE);
+  });
+
+  it("opens no Drive session when the hosts chose this site, and never asks Google", async () => {
+    await asGuest();
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    expect(await response.json()).toEqual({ sessionUrl: null });
+    expect(openUploadSession).not.toHaveBeenCalled();
+  });
+
+  it("pauses everyone, hosts included, when Drive is chosen but not connected", async () => {
+    settings = open("open", "drive");
+    await asHost();
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "paused" });
+    expect(openUploadSession).not.toHaveBeenCalled();
+  });
+
+  it("pauses while Drive is recorded as failing", async () => {
+    settings = open("open", "drive");
+    driveConnection = { ...HEALTHY_DRIVE, health: "failing", failureKind: "unavailable" };
+    await asGuest();
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(await response.json()).toEqual({ error: "paused" });
+  });
+
+  it("records a Drive failure so the next guest is paused instead of retrying into it", async () => {
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
+    openUploadSession.mockRejectedValue(new Error("Google timed out"));
+    await asGuest();
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "paused" });
+    expect(recordDriveFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("pauses at the storage cap", async () => {
+    totals = { live: 0, hidden: 0, bytes: 500 * 1024 * 1024 };
+    await asGuest();
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(await response.json()).toEqual({ error: "paused" });
   });
 
   it("refuses an original over the size limit", async () => {
@@ -216,13 +302,6 @@ describe("POST /api/photos/session", () => {
     expect(response.status).toBe(400);
   });
 
-  it("answers null when Drive is not connected, so the wall still works", async () => {
-    await asGuest();
-    openUploadSession.mockResolvedValue(null);
-
-    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
-    expect(await response.json()).toEqual({ sessionUrl: null });
-  });
 
   it("stops at the rate limit", async () => {
     await asGuest();
@@ -267,6 +346,27 @@ describe("POST /api/photos", () => {
       height: 1200,
     });
     expect(args.driveFileId).toBeUndefined();
+  });
+
+  it("names the cap when the record is refused for it", async () => {
+    await asGuest();
+    mutation.mockImplementation(async (fn: unknown) => {
+      switch (getFunctionName(fn as Parameters<typeof getFunctionName>[0])) {
+        case "rateLimit:consume":
+          return { allowed: true, retryAfterMs: 0 };
+        case "photos:generateUploadUrl":
+          return "https://example.convex.cloud/upload";
+        case "photos:create":
+          return { ok: false, reason: "storage-full" };
+        default:
+          throw new Error("unexpected mutation");
+      }
+    });
+
+    const response = await photos.POST(finalizeForm());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "storage-full" });
   });
 
   it("checks a claimed Drive file against the folder before recording it", async () => {
@@ -316,14 +416,14 @@ describe("GET /api/photos", () => {
     const response = await photos.GET(new Request(`${BASE}/api/photos?filter=hidden`));
 
     expect(response.status).toBe(200);
-    expect(query.mock.calls[0][1]).toMatchObject({ filter: "live", viewerId: DEVICE });
+    expect(queried("photos:wall")[0][1]).toMatchObject({ filter: "live", viewerId: DEVICE });
   });
 
   it("lets a host ask for hidden photos", async () => {
     await asHost();
 
     await photos.GET(new Request(`${BASE}/api/photos?filter=hidden`));
-    expect(query.mock.calls[0][1]).toMatchObject({ filter: "hidden" });
+    expect(queried("photos:wall")[0][1]).toMatchObject({ filter: "hidden" });
   });
 
   it("refuses a caller with no session", async () => {

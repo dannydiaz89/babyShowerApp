@@ -4,7 +4,7 @@ import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { PHOTO_WEB_MAX_BYTES } from "../../convex/limits";
+import { PHOTO_STORAGE_CAP_BYTES, PHOTO_WEB_MAX_BYTES } from "../../convex/limits";
 
 /**
  * The photo functions against a real database.
@@ -79,7 +79,7 @@ describe("create", () => {
     expect(view.uploaderName).toBe("Tía Rosa");
     expect(view.url).toMatch(/^http/);
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 
   it("refuses a web copy over the size limit and throws the file away", async () => {
@@ -94,12 +94,12 @@ describe("create", () => {
       height: 10,
     });
 
-    expect(result).toEqual({ ok: false, reason: expect.stringMatching(/too large/) });
+    expect(result).toEqual({ ok: false, reason: "too-large" });
     // Refused by returning, not throwing: a throw would roll the delete back
     // and leave the oversize file in storage for good.
     const stillThere = await t.run(async (ctx) => ctx.storage.getUrl(oversized));
     expect(stillThere).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 
   it("refuses dimensions the wall cannot lay out and drops the file", async () => {
@@ -113,8 +113,105 @@ describe("create", () => {
       height: 10,
     });
 
-    expect(result).toEqual({ ok: false, reason: expect.stringMatching(/dimensions/) });
+    expect(result).toEqual({ ok: false, reason: "bad-dimensions" });
     expect(await t.run(async (ctx) => ctx.storage.getUrl(copy))).toBeNull();
+  });
+});
+
+describe("the storage cap", () => {
+  it("refuses a copy that would pass the cap, drops the file, and leaves the totals alone", async () => {
+    const t = db();
+    // Fill the counter to just under the cap without storing that much.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("photoTotals", {
+        singleton: "photos",
+        live: 0,
+        hidden: 0,
+        bytes: PHOTO_STORAGE_CAP_BYTES - 500,
+      });
+    });
+    const copy = await storeCopy(t, 1000);
+
+    const result = await t.mutation(api.photos.create, {
+      key: KEY,
+      uploaderId: "dev-a",
+      webStorageId: copy,
+      width: 10,
+      height: 10,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "storage-full" });
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(copy))).toBeNull();
+    expect((await t.query(api.photos.totals, { key: KEY })).bytes).toBe(PHOTO_STORAGE_CAP_BYTES - 500);
+  });
+
+  it("still takes a copy that fits exactly", async () => {
+    const t = db();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("photoTotals", {
+        singleton: "photos",
+        live: 0,
+        hidden: 0,
+        bytes: PHOTO_STORAGE_CAP_BYTES - 1000,
+      });
+    });
+
+    const photo = await addPhoto(t, "dev-a");
+    expect(photo.status).toBe("live");
+    expect((await t.query(api.photos.totals, { key: KEY })).bytes).toBe(PHOTO_STORAGE_CAP_BYTES);
+  });
+
+  it("gives the bytes back when a photo is deleted, hidden or not", async () => {
+    const t = db();
+    const a = await addPhoto(t, "dev-a");
+    const b = await addPhoto(t, "dev-a");
+    await t.mutation(api.photos.hide, { key: KEY, id: b.id, by: "host", uploaderId: null });
+    expect((await t.query(api.photos.totals, { key: KEY })).bytes).toBe(2000);
+
+    await t.mutation(api.photos.remove, { key: KEY, id: a.id });
+    await t.mutation(api.photos.remove, { key: KEY, id: b.id });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+  });
+});
+
+describe("drive health", () => {
+  const base = {
+    key: KEY,
+    account: "host@example.com",
+    folderId: "f",
+    folderName: "Photos",
+    folderUrl: "https://drive.example/f",
+    refreshTokenSealed: "sealed",
+  };
+
+  it("records a failure with when it started, and keeps that through repeats", async () => {
+    const t = db();
+    await t.mutation(api.drive.set, base);
+
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "unavailable", message: "timeout" });
+    const first = await t.query(api.drive.get, { key: KEY });
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "unavailable", message: "again" });
+    const second = await t.query(api.drive.get, { key: KEY });
+
+    expect(first?.health).toBe("failing");
+    expect(second?.failedAt).toBe(first?.failedAt);
+    expect(second?.failureMessage).toBe("again");
+  });
+
+  it("clears the failure on a healthy answer, and on a reconnect", async () => {
+    const t = db();
+    await t.mutation(api.drive.set, base);
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "revoked" });
+
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "ok" });
+    const healed = await t.query(api.drive.get, { key: KEY });
+    expect(healed?.health).toBe("ok");
+    expect(healed?.failureKind).toBeUndefined();
+    expect(healed?.failedAt).toBeUndefined();
+
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "revoked" });
+    await t.mutation(api.drive.set, { ...base, refreshTokenSealed: "sealed-2" });
+    expect((await t.query(api.drive.get, { key: KEY }))?.health).toBeUndefined();
   });
 });
 
@@ -178,7 +275,7 @@ describe("hide", () => {
 
     expect(result.ok).toBe(false);
     expect((await wall(t, "live", null)).page).toHaveLength(1);
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 
   it("refuses a guest with no device cookie at all", async () => {
@@ -207,7 +304,7 @@ describe("hide", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1, bytes: 1000 });
   });
 
   it("lets a host hide anyone's photo", async () => {
@@ -233,7 +330,7 @@ describe("hide", () => {
     await t.mutation(api.photos.hide, args);
     await t.mutation(api.photos.hide, args);
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1, bytes: 1000 });
   });
 });
 
@@ -248,7 +345,7 @@ describe("restore", () => {
     const live = await wall(t, "live", null);
     expect(live.page.map((p) => p.id)).toEqual([photo.id]);
     expect(live.page[0].hiddenBy).toBeUndefined();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 });
 
@@ -263,7 +360,7 @@ describe("remove", () => {
     expect(result.driveFileId).toBe("drive-123");
     expect((await wall(t, "all", null)).page).toHaveLength(0);
     expect(await t.run(async (ctx) => ctx.storage.getUrl(storageId))).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 
   it("takes a hidden photo out of the hidden count, not the live one", async () => {
@@ -274,7 +371,7 @@ describe("remove", () => {
 
     await t.mutation(api.photos.remove, { key: KEY, id: gone.id });
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
     expect((await wall(t, "all", null)).page.map((p) => p.id)).toEqual([keep.id]);
   });
 
@@ -285,7 +382,7 @@ describe("remove", () => {
 
     const again = await t.mutation(api.photos.remove, { key: KEY, id: photo.id });
     expect(again.driveFileId).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0 });
+    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 });
 

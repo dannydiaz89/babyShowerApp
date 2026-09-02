@@ -314,6 +314,14 @@ export const en = {
     guestPasswordSaved: "Guest password updated.",
 
     sectionPhotos: "Photos",
+    storageTitle: "Photo storage",
+    storageSite: "This site",
+    storageSiteHint:
+      "No setup. Originals are not kept: each photo is saved as a large web copy, good for phones and prints up to about 8×10, inside {cap} of storage.",
+    storageDrive: "Google Drive",
+    storageDriveHint:
+      "Originals at full quality, in a folder in your own Google Drive. Needs the connection below. If Drive is chosen and not answering, uploads pause until it is.",
+    storageSwitchNote: "Changing this only affects photos added from then on.",
     wallMode: "Photo wall",
     wallModeAuto: "Open automatically on the event date",
     wallModeAutoHint:
@@ -339,6 +347,10 @@ export const en = {
     driveNoticeDisconnected: "Google Drive disconnected. Photos already in the folder stay there.",
     driveNoticeDenied: "Google access was not granted, so nothing changed.",
     driveNoticeError: "Connecting to Google Drive didn't work. Please try again.",
+    driveNoticeHealthy: "Google Drive answered. Uploads are back on.",
+    driveNoticeStillFailing: "Google Drive still isn't answering. Uploads stay paused.",
+    driveCheck: "Check again",
+    driveHealthy: "Google Drive is answering.",
   },
 
   photos: {
@@ -352,6 +364,9 @@ export const en = {
     loadMore: "Load more",
     endOfWall: "That's everyone's photos so far.",
     closedNotice: "Uploads are closed. Thank you to everyone who shared.",
+    pausedNotice: "Photo uploads are paused for a moment. Photos already added are still here.",
+    pausedNoticeHost: "Uploads are paused because the photo storage isn't ready. See Settings → Photos.",
+    fullNotice: "The photo wall is full. Thank you to everyone who shared.",
     loadFailed: "Couldn't load more photos. Check your connection and try again.",
 
     bannerTitle: "Took any photos today?",
@@ -398,6 +413,9 @@ export const en = {
     addMore: "Add more",
     someFailed: "{count} didn't make it. Retry them, or remove them and finish.",
     leaveWarning: "Photos are still uploading.",
+    pausedTitle: "Oops, uploads are paused for a moment",
+    pausedBody: "Nothing from this batch was lost on your side. Please try again a little later.",
+    pausedBodyFull: "The photo wall is full, so no more photos can be added.",
 
     viewerLabel: "Photo viewer",
     close: "Close",
@@ -418,6 +436,8 @@ export const en = {
 
     errSignedOut: "Your session has expired. Enter the password from your invitation again.",
     errClosed: "The photo wall isn't taking photos right now.",
+    errPaused: "Uploads are paused for a moment. Please try again later.",
+    errStorageFull: "The photo wall is full.",
     errRateLimited: "That's a lot of photos at once. Wait a little and try again.",
     errTooLarge: "That photo is too large to upload.",
     errBadRequest: "That photo couldn't be added.",
@@ -448,6 +468,18 @@ export const en = {
     webOnly: "web copy only",
     noHidden: "Nothing hidden. Guests haven't removed any photos.",
     hostEmpty: "No photos yet.",
+
+    storageMeter: "{used} of {cap} used for web copies",
+    storageWarning: "The site's storage is getting full. Delete photos to make room, or the wall will stop taking photos.",
+    storageFullHost: "The site's storage is full. Uploads have stopped until photos are deleted.",
+    driveFailingHost:
+      "Google Drive stopped answering at {time}. Uploads are paused until it answers again; the site checks every couple of minutes, or you can check now, reconnect, or switch to keeping photos on this site.",
+    driveRevokedHost:
+      "Google Drive refused the connection at {time}. Uploads are paused until you reconnect, or switch to keeping photos on this site.",
+    driveUnconnectedHost:
+      "Google Drive is chosen as the photo storage but isn't connected. Uploads are paused until you connect it, or switch to keeping photos on this site.",
+    driveLastError: "Google said: {message}",
+    goToSettings: "Open Photos settings",
   },
 
   common: {
@@ -772,6 +804,14 @@ export const es: Dictionary = {
     guestPasswordSaved: "Contraseña de invitados actualizada.",
 
     sectionPhotos: "Fotos",
+    storageTitle: "Almacenamiento de fotos",
+    storageSite: "Este sitio",
+    storageSiteHint:
+      "Sin configuración. No se guardan los originales: cada foto se guarda como una copia web grande, buena para teléfonos e impresiones de hasta unos 20×25 cm, dentro de {cap} de almacenamiento.",
+    storageDrive: "Google Drive",
+    storageDriveHint:
+      "Originales a plena calidad, en una carpeta de su propio Google Drive. Necesita la conexión de abajo. Si Drive está elegido y no responde, las subidas se pausan hasta que responda.",
+    storageSwitchNote: "Cambiar esto solo afecta a las fotos que se suban a partir de entonces.",
     wallMode: "Muro de fotos",
     wallModeAuto: "Abrir automáticamente el día del evento",
     wallModeAutoHint:
@@ -797,6 +837,10 @@ export const es: Dictionary = {
     driveNoticeDisconnected: "Google Drive desconectado. Las fotos que ya están en la carpeta se quedan ahí.",
     driveNoticeDenied: "No se concedió el acceso a Google, así que nada cambió.",
     driveNoticeError: "No se pudo conectar Google Drive. Inténtenlo de nuevo.",
+    driveNoticeHealthy: "Google Drive respondió. Las subidas están activas otra vez.",
+    driveNoticeStillFailing: "Google Drive sigue sin responder. Las subidas siguen pausadas.",
+    driveCheck: "Comprobar de nuevo",
+    driveHealthy: "Google Drive está respondiendo.",
   },
 
   photos: {
@@ -810,6 +854,9 @@ export const es: Dictionary = {
     loadMore: "Cargar más",
     endOfWall: "Esas son todas las fotos por ahora.",
     closedNotice: "Ya no se pueden subir fotos. Gracias a todos por compartir.",
+    pausedNotice: "La subida de fotos está pausada por un momento. Las fotos ya subidas siguen aquí.",
+    pausedNoticeHost: "Las subidas están pausadas porque el almacenamiento de fotos no está listo. Vean Configuración → Fotos.",
+    fullNotice: "El muro de fotos está lleno. Gracias a todos por compartir.",
     loadFailed: "No se pudieron cargar más fotos. Revisen su conexión e inténtenlo de nuevo.",
 
     bannerTitle: "¿Tomaron fotos hoy?",
@@ -856,6 +903,9 @@ export const es: Dictionary = {
     addMore: "Subir más",
     someFailed: "{count} no se pudieron subir. Reinténtenlas, o quítenlas y terminen.",
     leaveWarning: "Todavía se están subiendo fotos.",
+    pausedTitle: "Ups, las subidas están pausadas por un momento",
+    pausedBody: "No se perdió nada de su lado. Inténtenlo de nuevo un poco más tarde.",
+    pausedBodyFull: "El muro de fotos está lleno, así que no se pueden subir más fotos.",
 
     viewerLabel: "Visor de fotos",
     close: "Cerrar",
@@ -876,6 +926,8 @@ export const es: Dictionary = {
 
     errSignedOut: "Su sesión expiró. Escriban de nuevo la contraseña de la invitación.",
     errClosed: "El muro de fotos no acepta fotos en este momento.",
+    errPaused: "Las subidas están pausadas por un momento. Inténtenlo más tarde.",
+    errStorageFull: "El muro de fotos está lleno.",
     errRateLimited: "Son muchas fotos de golpe. Esperen un poco e inténtenlo de nuevo.",
     errTooLarge: "Esa foto es demasiado grande para subirla.",
     errBadRequest: "Esa foto no se pudo subir.",
@@ -906,6 +958,18 @@ export const es: Dictionary = {
     webOnly: "solo copia web",
     noHidden: "No hay fotos ocultas. Ningún invitado ha quitado fotos.",
     hostEmpty: "Aún no hay fotos.",
+
+    storageMeter: "{used} de {cap} usados en copias web",
+    storageWarning: "El almacenamiento del sitio se está llenando. Borren fotos para hacer espacio, o el muro dejará de aceptar fotos.",
+    storageFullHost: "El almacenamiento del sitio está lleno. Las subidas se detuvieron hasta que se borren fotos.",
+    driveFailingHost:
+      "Google Drive dejó de responder a las {time}. Las subidas están pausadas hasta que responda; el sitio lo comprueba cada par de minutos, o pueden comprobarlo ahora, volver a conectar, o cambiar a guardar las fotos en este sitio.",
+    driveRevokedHost:
+      "Google Drive rechazó la conexión a las {time}. Las subidas están pausadas hasta que vuelvan a conectar, o cambien a guardar las fotos en este sitio.",
+    driveUnconnectedHost:
+      "Google Drive está elegido como almacenamiento pero no está conectado. Las subidas están pausadas hasta que lo conecten, o cambien a guardar las fotos en este sitio.",
+    driveLastError: "Google dijo: {message}",
+    goToSettings: "Abrir la configuración de Fotos",
   },
 
   common: {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { PHOTO_ORIGINAL_MAX_BYTES } from "../../../../../convex/limits";
-import { DriveError, openUploadSession } from "@/lib/google-drive";
+import { openUploadSession, recordDriveFailure } from "@/lib/google-drive";
 import { ensureUploaderId, photoCaller, wallState } from "@/lib/photos";
+import { getSettings } from "@/lib/settings";
 import { PHOTO_RATE, refuse, withinLimit } from "@/lib/photo-routes";
 
 /*
@@ -12,8 +13,11 @@ import { PHOTO_RATE, refuse, withinLimit } from "@/lib/photo-routes";
  * never touch this server, which could not take them anyway — Vercel caps a
  * request body well below a phone photo.
  *
- * Answers `sessionUrl: null` when Drive is not connected. The wall still
- * works; originals are simply not kept, and Settings says so to the hosts.
+ * Answers `sessionUrl: null` when the hosts chose "this site" as storage:
+ * no original is kept, only the larger web copy. With Drive chosen, a
+ * failure here is recorded on the connection so that uploads pause for
+ * everyone until Google answers again, rather than each guest finding out
+ * one photo at a time.
  */
 
 export const dynamic = "force-dynamic";
@@ -25,6 +29,9 @@ export async function POST(request: Request) {
   if (!caller.role) return refuse("signed-out", 401);
 
   const state = await wallState();
+  // A pause holds for hosts too: it is the storage that is not ready, not
+  // the guest. A closed wall a host may still test.
+  if (state.paused) return refuse("paused", 503);
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
@@ -46,6 +53,9 @@ export async function POST(request: Request) {
   if (!name || !type.startsWith("image/") || !(size >= 1)) return refuse("bad-request", 400);
   if (size > PHOTO_ORIGINAL_MAX_BYTES) return refuse("too-large", 413);
 
+  const { photoStorage } = await getSettings();
+  if (photoStorage !== "drive") return NextResponse.json({ sessionUrl: null });
+
   try {
     const session = await openUploadSession({
       name,
@@ -53,11 +63,11 @@ export async function POST(request: Request) {
       size,
       origin: new URL(request.url).origin,
     });
-    return NextResponse.json({ sessionUrl: session?.sessionUrl ?? null });
+    if (!session) return refuse("paused", 503);
+    return NextResponse.json({ sessionUrl: session.sessionUrl });
   } catch (error) {
     console.error("Opening a Drive upload session failed", error);
-    // A revoked connection is not going to fix itself on retry; say so.
-    const status = error instanceof DriveError && error.kind === "revoked" ? 409 : 502;
-    return refuse("drive", status);
+    await recordDriveFailure(error);
+    return refuse("paused", 503);
   }
 }

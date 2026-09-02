@@ -36,7 +36,56 @@ export type WallState = {
   visible: boolean;
   /** Accept uploads and show the day-of banner. */
   uploads: boolean;
+  /**
+   * Why uploads are off while the wall would otherwise be taking them, or
+   * null. A closed or not-yet-open wall is not a pause; this is only for
+   * the storage behind it not being ready.
+   */
+  paused: PauseReason | null;
 };
+
+export type PauseReason =
+  /** Drive is the chosen storage and no Google account is connected. */
+  | "drive-unconnected"
+  /** Google stopped answering; a later probe may bring it back. */
+  | "drive-failing"
+  /** Google refused the grant; only reconnecting helps. */
+  | "drive-revoked"
+  /** The site's storage for web copies is at its cap. */
+  | "storage-full";
+
+export type StorageStatus = {
+  storage: "site" | "drive";
+  /** Drive as connected, or null. Health is null when it has never failed. */
+  drive: { health: "ok" | "failing"; failureKind: "unavailable" | "revoked" | null } | null;
+  /** Web-copy bytes in the site's storage, and the cap. */
+  bytes: number;
+  cap: number;
+};
+
+/**
+ * What stops uploads even when the wall is open.
+ *
+ * The site's storage is checked whichever original store is chosen: the
+ * web copy always lands there. Drive is only a reason when Drive is chosen —
+ * a host who picked "this site" is not held up by a Google outage.
+ */
+export function pauseReason(status: StorageStatus): PauseReason | null {
+  if (status.bytes >= status.cap) return "storage-full";
+  if (status.storage === "drive") {
+    if (!status.drive) return "drive-unconnected";
+    if (status.drive.health === "failing") {
+      return status.drive.failureKind === "revoked" ? "drive-revoked" : "drive-failing";
+    }
+  }
+  return null;
+}
+
+/** The open/closed rule with the storage's readiness folded in. */
+export function withStorage(state: WallState, status: StorageStatus): WallState {
+  const paused = state.uploads ? pauseReason(status) : null;
+  return { ...state, uploads: state.uploads && paused === null, paused };
+}
 
 const LOCAL_DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/;
 
@@ -123,14 +172,14 @@ export function photoWallState(
 
   switch (mode) {
     case "open":
-      return { visible: true, uploads: !closed };
+      return { visible: true, uploads: !closed, paused: null };
     case "auto": {
       const eventDate = eventDateISO(startISO);
       // An unreadable date cannot open the wall on its own. The hosts can
       // still open it by hand.
-      if (!eventDate) return { visible: false, uploads: false };
+      if (!eventDate) return { visible: false, uploads: false, paused: null };
       const open = localDateISO(now, timeZone) >= eventDate;
-      return { visible: open, uploads: open && !closed };
+      return { visible: open, uploads: open && !closed, paused: null };
     }
   }
 }

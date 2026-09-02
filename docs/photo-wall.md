@@ -16,9 +16,17 @@ https://claude.ai/code/artifact/66157bd8-ca15-4d5e-9a2f-7f789df68fe3
   creates its own folder and can reach nothing else in the Drive. A service
   account was rejected: it would own the files and count them against its own
   quota.
-- **Web copies → Convex file storage** for now. ~1600px WebP made on the
-  phone, JPEG when the browser cannot encode WebP. Kept behind one seam so S3
-  or similar can replace it later.
+- **Two storages, chosen in Settings.** "This site" (default): no originals,
+  a ~2400px web copy in Convex file storage, a 500 MB cap with a meter.
+  "Google Drive": a ~1600px copy plus the original in Drive. Web copies
+  always live in Convex — which is also what a self-hosted Convex container
+  keeps on a volume, so "this site" becomes local storage in Docker later.
+- **Drive not ready pauses uploads.** Chosen but unconnected, failing, or
+  revoked: uploads stop for everyone, the wall stays viewable, guests mid-
+  batch are cancelled and sent back with a "try again later" note, hosts get
+  the reason and the ways out. Outages re-probe themselves every couple of
+  minutes; a revoked grant needs a reconnect. No email; the dashboard carries
+  a one-line pointer.
 - **Banner and tab appear automatically on the event date** and stay on.
   A host setting can open the wall early. Closing is a date and time, not a
   switch: preset to a week after the event and editable in Settings. At

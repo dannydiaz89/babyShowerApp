@@ -17,9 +17,11 @@ import {
 } from "@/lib/settings-tabs";
 import {
   DEFAULT_SETTINGS,
+  PHOTO_STORAGE_OPTIONS,
   PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
   type Localized,
+  type PhotoStorage,
   type PhotoWallMode,
   type Settings,
 } from "@/lib/defaults";
@@ -123,11 +125,15 @@ function fieldsForTab(tab: SettingsTab, form: FormData, stored: Settings): Parti
        */
       const wellFormed = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(closes);
       const preset = defaultClosesISO(stored.startISO, stored.endISO);
+      const storage = str(form, "photoStorage");
       return {
         photoWall: (PHOTO_WALL_MODES as readonly string[]).includes(mode)
           ? (mode as PhotoWallMode)
           : "auto",
         photoWallClosesISO: wellFormed && closes !== preset ? closes : "",
+        photoStorage: (PHOTO_STORAGE_OPTIONS as readonly string[]).includes(storage)
+          ? (storage as PhotoStorage)
+          : "site",
       };
     }
     case "access":

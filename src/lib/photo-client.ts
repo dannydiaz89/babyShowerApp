@@ -31,6 +31,10 @@ export function messageFor(error: unknown, t: PhotosText): string {
       return t.errSignedOut;
     case "closed":
       return t.errClosed;
+    case "paused":
+      return t.errPaused;
+    case "storage-full":
+      return t.errStorageFull;
     case "rate-limited":
       return t.errRateLimited;
     case "too-large":

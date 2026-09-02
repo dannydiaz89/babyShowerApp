@@ -38,7 +38,8 @@ export default async function PhotosPage() {
     console.error("Loading the photo wall failed", error);
   }
 
-  const canUpload = wall.uploads || previewing;
+  // A host may test a closed wall, but not one whose storage is not ready.
+  const canUpload = wall.uploads || (previewing && !wall.paused);
 
   return (
     <>
@@ -54,7 +55,23 @@ export default async function PhotosPage() {
       <main id="main" className="mx-auto max-w-5xl px-3 pb-20 pt-8 sm:px-5 sm:pt-10">
         <div className="px-2 sm:px-0">
           <PageTitle>{t.photos.title}</PageTitle>
-          {!wall.uploads ? (
+          {wall.paused ? (
+            <Alert tone="neutral" role="status" className="mt-3 max-w-xl">
+              {wall.paused === "storage-full"
+                ? t.photos.fullNotice
+                : previewing
+                  ? t.photos.pausedNoticeHost
+                  : t.photos.pausedNotice}
+              {previewing ? (
+                <>
+                  {" "}
+                  <a href="/admin/settings?tab=photos" className="underline underline-offset-4">
+                    {t.photos.goToSettings}
+                  </a>
+                </>
+              ) : null}
+            </Alert>
+          ) : !wall.uploads ? (
             <p className="mt-2 text-sm text-ink-muted">{t.photos.closedNotice}</p>
           ) : null}
         </div>

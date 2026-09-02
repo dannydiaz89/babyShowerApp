@@ -53,13 +53,30 @@ means "photos from this phone". A guest can remove their own photos, which
 only hides them: hosts see hidden photos on `/admin/photos` and are the only
 ones who restore or delete for good.
 
-**Where photos go.** Two copies per photo. The phone makes a ~1600px WebP
-(JPEG on browsers that cannot encode WebP) that the wall shows, stored in
-Convex file storage. The untouched original goes straight from the phone to a
-folder in the hosts' own Google Drive — the bytes never pass through Vercel,
-which could not take them anyway. Connect the Drive once from Settings →
-Photos (see [Google Drive](#google-drive) below). Without it the wall still
-works; photos are kept at web size only, and Settings says so.
+**Where photos go.** Settings → Photos offers two storages for the original:
+
+- **This site** (the default, no setup). Originals are not kept. The phone
+  makes a ~2400px WebP (JPEG on browsers that cannot encode WebP), good for
+  phones and prints up to about 8×10, and that is what the wall shows. These
+  live in Convex file storage inside a 500 MB cap; the host pages show a
+  meter, and at the cap uploads stop until photos are deleted.
+- **Google Drive.** The phone makes a ~1600px web copy for the wall and sends
+  the untouched original straight to a folder in the hosts' own Google Drive
+  — the bytes never pass through Vercel, which could not take them anyway.
+  Connect the Drive once from Settings → Photos (see
+  [Google Drive](#google-drive) below).
+
+Changing the choice only affects photos added from then on. If Drive is the
+chosen storage and it is not connected, or Google stops answering, uploads
+**pause** for everyone rather than quietly losing originals: the upload page
+sends guests back to the wall with a "try again later" note, the host pages
+say what happened and offer Check again, Reconnect, or switching to this
+site, and an outage on Google's side clears itself — the site re-probes every
+couple of minutes on a page load. A revoked grant only clears on reconnect.
+
+"This site" maps onto Convex file storage on purpose: Convex also ships a
+self-hosted backend as a Docker image that keeps files on a local volume, so
+the same code path is "local storage" in a container later.
 
 **When it opens and closes.** By default the wall opens at midnight on the
 event date, in `America/Los_Angeles` (`EVENT_TIME_ZONE` in

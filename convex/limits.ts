@@ -58,8 +58,25 @@ export const PHOTO_ORIGINAL_MAX_BYTES = 25 * 1024 * 1024;
  */
 export const PHOTO_WEB_MAX_BYTES = 1.5 * 1024 * 1024;
 
-/** Long edge of a web copy, in pixels. The phone resizes to this. */
-export const PHOTO_WEB_MAX_EDGE = 1600;
+/**
+ * Long edge of a web copy, in pixels. The phone resizes to this.
+ *
+ * Two sizes, by where the original goes. With Google Drive keeping the
+ * original, the copy only has to look good on a phone. With "this site"
+ * the copy is all there is, so it is made large enough to print well up
+ * to about 8x10 — roughly 350 KB instead of 150.
+ */
+export const PHOTO_WEB_MAX_EDGE_DRIVE = 1600;
+export const PHOTO_WEB_MAX_EDGE_SITE = 2400;
+
+/**
+ * How much the site's own storage may hold in web copies, in bytes.
+ *
+ * Convex's free plan includes 1 GB of file storage; this keeps the wall
+ * well inside it. At the cap, uploads stop and the hosts are told; deleting
+ * photos makes room. Counted on the totals row, so checking it is one read.
+ */
+export const PHOTO_STORAGE_CAP_BYTES = 500 * 1024 * 1024;
 
 /** A width or height past this is not a photo the wall can lay out. */
 export const PHOTO_MAX_DIMENSION = 8000;

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { api } from "../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
 import { open, seal } from "@/lib/seal";
@@ -148,7 +149,15 @@ export async function accountEmail(accessToken: string): Promise<string> {
 
 /* ------------------------------------------------------------ connection */
 
-export type DriveConnection = {
+export type DriveHealth = {
+  health: "ok" | "failing";
+  failureKind: "unavailable" | "revoked" | null;
+  failureMessage: string | null;
+  failedAt: number | null;
+  lastCheckedAt: number | null;
+};
+
+export type DriveConnection = DriveHealth & {
   account: string;
   folderId: string;
   folderName: string;
@@ -168,17 +177,94 @@ async function storedConnection(): Promise<StoredConnection | null> {
     folderUrl: row.folderUrl,
     connectedAt: row.connectedAt,
     refreshTokenSealed: row.refreshTokenSealed,
+    health: row.health ?? "ok",
+    failureKind: row.failureKind ?? null,
+    failureMessage: row.failureMessage ?? null,
+    failedAt: row.failedAt ?? null,
+    lastCheckedAt: row.lastCheckedAt ?? null,
   };
 }
 
+/* ---------------------------------------------------------------- health */
+
+/**
+ * Remember that Google did not answer, so uploads pause instead of every
+ * guest finding out one photo at a time. Anything that is not a DriveError
+ * is treated as "unavailable": a timeout or a network fault looks the same
+ * from here and heals the same way.
+ */
+export async function recordDriveFailure(error: unknown): Promise<void> {
+  const kind = error instanceof DriveError && error.kind === "revoked" ? "revoked" : "unavailable";
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    await convexClient().mutation(api.drive.setHealth, {
+      key: convexKey(),
+      health: "failing",
+      kind,
+      message,
+    });
+  } catch (inner) {
+    console.error("Recording the Drive failure failed", inner);
+  }
+}
+
+async function recordDriveHealthy(): Promise<void> {
+  try {
+    await convexClient().mutation(api.drive.setHealth, { key: convexKey(), health: "ok" });
+  } catch (error) {
+    console.error("Recording Drive health failed", error);
+  }
+}
+
+/** How long a failing connection is left alone before a page load re-tries it. */
+export const DRIVE_PROBE_INTERVAL_MS = 2 * 60 * 1000;
+
+/**
+ * Ask Google whether the connection works: refresh the token and read the
+ * folder. Records the answer either way. True when Drive is usable.
+ *
+ * Called from Settings by hand and, for an "unavailable" failure, from a
+ * page load once the probe interval has passed — so an outage on Google's
+ * side clears itself without a host doing anything. A revoked grant is
+ * never re-probed: only reconnecting can fix it.
+ */
+export async function probeDrive(): Promise<boolean> {
+  const connection = await storedConnection();
+  if (!connection || !googleConfigured()) return false;
+  try {
+    const accessToken = await accessTokenFor(connection);
+    const response = await driveFetch(
+      accessToken,
+      `${DRIVE_API}/files/${encodeURIComponent(connection.folderId)}?fields=id`
+    );
+    if (!response.ok) throw new DriveError(`Google answered ${response.status} for the folder.`);
+    await recordDriveHealthy();
+    return true;
+  } catch (error) {
+    await recordDriveFailure(error);
+    return false;
+  }
+}
+
+/** Re-probe a failing-but-recoverable connection once the interval has passed. */
+export async function maybeReprobe(connection: DriveConnection): Promise<DriveConnection> {
+  if (connection.health !== "failing" || connection.failureKind === "revoked") return connection;
+  const since = Date.now() - (connection.lastCheckedAt ?? 0);
+  if (since < DRIVE_PROBE_INTERVAL_MS) return connection;
+  const ok = await probeDrive();
+  return ok
+    ? { ...connection, health: "ok", failureKind: null, failureMessage: null, failedAt: null }
+    : connection;
+}
+
 /** What Settings shows. Never includes the token. */
-export async function getDriveConnection(): Promise<DriveConnection | null> {
+export const getDriveConnection = cache(async (): Promise<DriveConnection | null> => {
   const row = await storedConnection();
   if (!row) return null;
   const { refreshTokenSealed: _sealed, ...connection } = row;
   void _sealed;
   return connection;
-}
+});
 
 export async function saveDriveConnection(connection: {
   refreshToken: string;
