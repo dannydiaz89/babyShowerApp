@@ -194,11 +194,16 @@ export function PhotoUploader({
 
   /* -------------------------------------------------------- uploading */
 
-  async function uploadOne(item: Item, uploaderName: string) {
+  async function uploadOne(item: Item, uploaderName: string, onSessionOpened?: () => void) {
     const controller = new AbortController();
     patch(item.key, { status: "uploading", controller, error: null, sent: 0 });
     try {
-      const sessionUrl = await openUploadSession(item.file, controller.signal);
+      let sessionUrl: string | null;
+      try {
+        sessionUrl = await openUploadSession(item.file, controller.signal);
+      } finally {
+        onSessionOpened?.();
+      }
 
       let driveFileId: string | null = null;
       if (sessionUrl) {
@@ -243,16 +248,29 @@ export function PhotoUploader({
       current.map((i) => (queue.some((q) => q.key === i.key) ? { ...i, status: "queued" } : i))
     );
 
-    // Three lanes pulling from one queue, so a slow file holds one lane, not all.
+    /*
+     * Three lanes pulling from one queue, so a slow file holds one lane, not
+     * all. The first session is opened before the other lanes start: it is
+     * the request that gives a device its cookie when nothing else has, and
+     * three such requests at once would each mint their own.
+     */
     const pending = [...queue];
-    const lane = async () => {
+    let firstOpened: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      firstOpened = resolve;
+    });
+
+    const lane = async (index: number) => {
+      if (index > 0) await gate;
       for (;;) {
         const next = pending.shift();
         if (!next) return;
-        await uploadOne(next, uploaderName);
+        await uploadOne(next, uploaderName, index === 0 ? firstOpened : undefined);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, lane));
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, pending.length) }, (_, i) => lane(i))
+    );
 
     setItems((current) => {
       const unfinished = current.some((i) => i.status === "failed" || i.status === "queued");

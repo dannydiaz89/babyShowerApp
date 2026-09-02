@@ -49,25 +49,29 @@ export class UnreadableImageError extends Error {
 }
 
 /**
- * Decode through an <img>, not createImageBitmap: the element path honours
+ * Load through an <img>, not createImageBitmap: the element path honours
  * EXIF orientation everywhere that matters, so a photo taken sideways is not
  * laid out sideways.
+ *
+ * Waits on `load`, not `img.decode()`. Browsers put off decoding for a
+ * document that is not visible, and a guest who switches apps mid-pick would
+ * come back to thumbnails that never appeared. Drawing to the canvas below
+ * decodes the pixels whether or not the tab is showing.
  */
-async function decode(file: File): Promise<HTMLImageElement> {
+function load(file: File): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file);
-  try {
+  return new Promise((resolve, reject) => {
     const img = new Image();
-    img.decoding = "async";
+    const finish = (ok: boolean) => {
+      // The pixels live on in the element; the URL can go as soon as it has loaded.
+      URL.revokeObjectURL(url);
+      if (ok && img.naturalWidth > 0) resolve(img);
+      else reject(new UnreadableImageError());
+    };
+    img.onload = () => finish(true);
+    img.onerror = () => finish(false);
     img.src = url;
-    await img.decode();
-    if (img.naturalWidth === 0) throw new UnreadableImageError();
-    return img;
-  } catch {
-    throw new UnreadableImageError();
-  } finally {
-    // The decoded bitmap lives on in the element; the URL can go at once.
-    URL.revokeObjectURL(url);
-  }
+  });
 }
 
 function draw(source: CanvasImageSource, size: Size): HTMLCanvasElement {
@@ -106,7 +110,7 @@ export async function prepareImage(
   file: File,
   maxEdge: number = PHOTO_WEB_MAX_EDGE
 ): Promise<PreparedImage> {
-  const img = await decode(file);
+  const img = await load(file);
   const natural = { width: img.naturalWidth, height: img.naturalHeight };
 
   const webSize = fitWithin(natural, maxEdge);

@@ -87,27 +87,44 @@ and pure helpers first so the UI is built on tested ground.
       device cookie; delete is hosts-only and removes the Drive file
 
 ### 4. Guest UI
-- [ ] Design system: gold callout tone, viewer surface tokens, progress bar,
+- [x] Design system: gold callout tone, viewer surface tokens, progress bar,
       new icons — tokens in `globals.css`, primitives in `components/ui`,
       contrast pairs registered in `scripts/check-contrast.mjs`
-- [ ] Strings in both languages
-- [ ] "Photos" in the guest nav and the day-of banner on the invitation
-- [ ] `/photos`: the wall, infinite scroll, viewer, remove
-- [ ] `/photos/add`: pick, local thumbnails, name field, per-photo and overall
+- [x] Strings in both languages
+- [x] "Photos" in the guest nav and the day-of banner on the invitation
+- [x] `/photos`: the wall, infinite scroll, viewer, remove
+- [x] `/photos/add`: pick, local thumbnails, name field, per-photo and overall
       progress, cancel, retry, done
 
 ### 5. Host UI
-- [ ] Settings → Photos tab: wall mode, connect / disconnect Google Drive
-- [ ] `/admin/photos`: all / hidden filter, restore, delete for good
-- [ ] "Photos" in the host nav
+- [x] Settings → Photos tab: wall mode, connect / disconnect Google Drive
+- [x] `/admin/photos`: all / hidden filter, restore, delete for good
+- [x] "Photos" in the host nav
 
 ### 6. Docs and checks
-- [ ] README: what's here, setup for Google, security notes, known limits
-- [ ] `tests/README.md`: what the new tests cover and why
-- [ ] `.env.example`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- [ ] lint, typecheck, tests, contrast, build all green
-- [ ] Walk through in the browser: banner, upload, wall, viewer, remove,
-      host restore and delete
+- [x] README: what's here, setup for Google, security notes, known limits
+- [x] `tests/README.md`: what the new tests cover and why
+- [x] `.env.example`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+- [x] lint, typecheck, tests, contrast, build all green
+- [x] Walk through in the browser: banner, upload, wall, viewer, remove,
+      host restore and delete (done on the dev deployment without Google
+      configured, so the Drive half ran its "not connected" path)
+
+## Found while verifying
+
+- **Three uploads at once minted three device cookies.** The first request
+  from a device set the cookie, but the batch opens three sessions in
+  parallel, so each minted its own and two thirds of the batch was not
+  "yours". Now the middleware sets the cookie on the page load, and the
+  uploader opens the first session alone before the other lanes start.
+- **`img.decode()` never resolves in a hidden tab.** Thumbnails stalled at
+  "Preparing…" whenever the page was not the visible tab. The loader waits on
+  `load` instead and lets the canvas draw do the decoding.
+- **A mutation that throws rolls back its own storage delete.** Refusing an
+  oversize web copy by throwing left the file in storage; the refusal is a
+  return value now, and the test asserts the file is gone.
+- **Four nav links overflow a phone's header row** into the exit control. The
+  page links now scroll sideways when they must.
 
 ## Before the event
 

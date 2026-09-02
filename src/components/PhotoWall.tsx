@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { PhotoViewer } from "@/components/PhotoViewer";
 import {
   Alert,
@@ -85,6 +86,16 @@ export function PhotoWall({
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const router = useRouter();
+
+  /**
+   * The host page's counts and filter chips are rendered on the server. A
+   * hide, restore or delete changes them, so the server half is refreshed
+   * after each; the wall itself has already updated in place.
+   */
+  const refreshHostPage = useCallback(() => {
+    if (mode === "host") router.refresh();
+  }, [mode, router]);
 
   /* ------------------------------------------------------------ layout */
 
@@ -181,6 +192,7 @@ export function PhotoWall({
         }
       }
       if (viewing !== null && photos.length <= 1) setViewing(null);
+      refreshHostPage();
     } catch (error) {
       setNotice({ tone: "critical", text: messageFor(error, t) });
     } finally {
@@ -202,6 +214,7 @@ export function PhotoWall({
           )
         );
       }
+      refreshHostPage();
     } catch (error) {
       setNotice({ tone: "critical", text: messageFor(error, t) });
     } finally {

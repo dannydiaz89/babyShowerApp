@@ -55,9 +55,15 @@ export function SiteHeader({
           {brand}
         </Link>
 
+        {/*
+          * Four pages plus "Back to dashboard" do not fit a phone's width on
+          * one row. Rather than wrap into a third row or overlap the exit
+          * control, the page links scroll sideways when they must — on most
+          * phones they still fit — and the exit control keeps its place.
+          */}
         <nav
           aria-label={navLabel}
-          className="col-start-1 row-start-2 flex items-center gap-5 sm:col-start-2 sm:row-start-1 sm:justify-self-end"
+          className="col-start-1 row-start-2 flex min-w-0 items-center gap-5 overflow-x-auto whitespace-nowrap [scrollbar-width:none] sm:col-start-2 sm:row-start-1 sm:justify-self-end sm:overflow-visible"
         >
           {links.map((link) => (
             <NavLink key={link.href} href={link.href} active={current === link.href}>
@@ -72,7 +78,7 @@ export function SiteHeader({
           className="col-start-2 row-start-1 justify-self-end sm:col-start-3"
         />
 
-        <div className="col-start-2 row-start-2 justify-self-end sm:col-start-4 sm:row-start-1">
+        <div className="col-start-2 row-start-2 shrink-0 justify-self-end whitespace-nowrap sm:col-start-4 sm:row-start-1">
           {previewing ? (
             <ButtonLink href="/admin/dashboard" variant="quiet" size="sm">
               {t.nav.exitPreview}

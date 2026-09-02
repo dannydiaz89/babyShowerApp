@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
+import {
+  UPLOADER_COOKIE,
+  isUploaderId,
+  newUploaderId,
+  uploaderCookieOptions,
+} from "@/lib/photo-device";
 
 /** Everything a guest needs the password to reach. */
 const GUEST_PATHS = ["/invitation", "/rsvp", "/registry", "/photos"];
@@ -37,7 +43,23 @@ export async function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
     return response;
   };
-  const proceed = () => send(NextResponse.next({ request: { headers: requestHeaders } }));
+  const proceed = () => {
+    const response = send(NextResponse.next({ request: { headers: requestHeaders } }));
+    /*
+     * The photo pages get their device cookie here, on the page load, not on
+     * the first upload. An upload batch opens three sessions at once, and if
+     * none of them had a cookie yet each would mint its own — three ids for
+     * one phone, and two thirds of its photos not "yours". The routes still
+     * mint one if it is missing, as a fallback; this just makes sure it is not.
+     */
+    if (
+      pathname.startsWith("/photos") &&
+      !isUploaderId(request.cookies.get(UPLOADER_COOKIE)?.value)
+    ) {
+      response.cookies.set(UPLOADER_COOKIE, newUploaderId(), uploaderCookieOptions());
+    }
+    return response;
+  };
 
   const adminToken = request.cookies.get(ADMIN_COOKIE)?.value;
 
