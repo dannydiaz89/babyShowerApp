@@ -96,12 +96,15 @@ export function GuestHeader({
   locale,
   t,
   previewing = false,
+  photos = false,
 }: {
   current: string;
   babyName: string;
   locale: Locale;
   t: Dictionary;
   previewing?: boolean;
+  /** The photo wall is open, so it gets a tab. See lib/photo-wall.ts. */
+  photos?: boolean;
 }) {
   return (
     <SiteHeader
@@ -115,6 +118,7 @@ export function GuestHeader({
         { href: "/invitation", label: t.nav.invitation },
         { href: "/rsvp", label: t.nav.rsvp },
         { href: "/registry", label: t.nav.registry },
+        ...(photos ? [{ href: "/photos", label: t.nav.photos }] : []),
       ]}
     />
   );
@@ -140,6 +144,7 @@ export function AdminHeader({
       navLabel={t.nav.hostArea}
       links={[
         { href: "/admin/dashboard", label: t.admin.dashboardShort },
+        { href: "/admin/photos", label: t.nav.photos },
         { href: "/admin/settings", label: t.admin.settings },
         { href: "/invitation", label: t.admin.viewSite },
       ]}

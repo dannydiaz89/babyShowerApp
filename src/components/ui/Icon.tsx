@@ -54,3 +54,55 @@ export function MoreIcon({ className = "h-4 w-4", ...props }: IconProps) {
     </svg>
   );
 }
+
+export function CameraIcon({ className = "h-5 w-5", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+export function ChevronLeftIcon({ className = "h-5 w-5", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon({ className = "h-5 w-5", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+export function CheckIcon({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M5 12.5l4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
+export function PlusIcon({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/** A photograph: a frame with a horizon and a sun. */
+export function PhotoIcon({ className = "h-5 w-5", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <rect x="3.5" y="5" width="17" height="14" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="M20.5 15.5l-4.5-4.5-7 7" />
+    </svg>
+  );
+}

@@ -47,6 +47,17 @@
          read at 2.4:1, so anything that becomes words uses gold-ink. ------ */
   --color-gold: #c8a54e;
   --color-gold-ink: #7a5c1f;
+  /* A warm ground for the one notice that should feel like an invitation
+     rather than a warning: the day-of photo banner. Text on it is ink or
+     gold-ink, both checked. */
+  --color-gold-soft: #f7efd9;
+
+  /* --- Viewer. The photo viewer is the one dark surface in the app: a
+         photograph reads best against near-black. Its text tokens are
+         checked against this ground only; nothing else is drawn on it. ---- */
+  --color-viewer: #0f1418;
+  --color-on-viewer: #ffffff;
+  --color-on-viewer-muted: #b3bcc6;
 
   /* --- Status. Deliberately outside the accent hue: "attending" and
          "declined" have to be distinguishable at a glance in a dense table,

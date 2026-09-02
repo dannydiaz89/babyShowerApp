@@ -3,6 +3,7 @@ import { Moon } from "@/components/Moon";
 import { Card, cardClass, PageTitle } from "@/components/ui";
 import { getTranslation, fill, pickOptional, present, formatDateShort } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
+import { wallState } from "@/lib/photos";
 import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
 /**
@@ -19,15 +20,16 @@ const ACCENT_STYLES: Record<string, string> = {
 export default async function RegistryPage() {
   await requireGuestAccess("/registry");
 
-  const [{ locale, t }, settings, previewing] = await Promise.all([
+  const [{ locale, t }, settings, previewing, wall] = await Promise.all([
     getTranslation(),
     getSettings(),
     isAdminSession(),
+    wallState(),
   ]);
 
   return (
     <>
-      <GuestHeader current="/registry" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} />
+      <GuestHeader current="/registry" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} photos={wall.visible} />
 
       <main id="main" className="mx-auto max-w-3xl px-5 pb-20 pt-12">
         <div className="mb-9 text-center">

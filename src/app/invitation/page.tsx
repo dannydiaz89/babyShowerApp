@@ -3,13 +3,16 @@ import { Moon } from "@/components/Moon";
 import {
   AnchorButton,
   ButtonLink,
+  Callout,
   Card,
   DisplayTitle,
   Eyebrow,
   Overline,
   OrnamentRule,
+  PhotoIcon,
   SectionTitle,
 } from "@/components/ui";
+import { PHOTO_BATCH_MAX } from "../../../convex/limits";
 import {
   getTranslation,
   fill,
@@ -21,6 +24,7 @@ import {
   formatDateShort,
   formatTimeRange,
 } from "@/lib/i18n";
+import { wallState } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
@@ -49,10 +53,11 @@ function calendarRange(startISO: string, endISO: string): string | null {
 export default async function InvitationPage() {
   await requireGuestAccess("/invitation");
 
-  const [{ locale, t }, settings, previewing] = await Promise.all([
+  const [{ locale, t }, settings, previewing, wall] = await Promise.all([
     getTranslation(),
     getSettings(),
     isAdminSession(),
+    wallState(),
   ]);
 
   const eventDate = formatDate(settings.startISO, locale);
@@ -94,9 +99,26 @@ export default async function InvitationPage() {
 
   return (
     <>
-      <GuestHeader current="/invitation" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} />
+      <GuestHeader current="/invitation" babyName={settings.babyName} locale={locale} t={t} previewing={previewing} photos={wall.visible} />
 
       <main id="main" className="mx-auto max-w-3xl px-5 pb-20 pt-12">
+        {wall.uploads ? (
+          /*
+           * The day-of banner. Above the invitation because on the day the
+           * details are known and the photos are the point; it appears by
+           * itself on the event date and stays while uploads are open.
+           */
+          <Callout as="section" icon={<PhotoIcon className="h-6 w-6" />} className="mb-6">
+            <h2 className="font-display text-xl text-ink">{t.photos.bannerTitle}</h2>
+            <p className="mt-0.5 text-sm text-ink-muted">
+              {fill(t.photos.bannerBody, { max: PHOTO_BATCH_MAX })}
+            </p>
+            <ButtonLink href="/photos/add" variant="primary" size="sm" className="mt-3">
+              {t.photos.bannerCta}
+            </ButtonLink>
+          </Callout>
+        ) : null}
+
         <Card as="section" className="px-6 py-12 text-center sm:px-12 sm:py-16">
           <Eyebrow>{t.invitation.eyebrow}</Eyebrow>
 

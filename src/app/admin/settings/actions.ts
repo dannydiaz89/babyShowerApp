@@ -15,8 +15,10 @@ import {
 } from "@/lib/settings-tabs";
 import {
   DEFAULT_SETTINGS,
+  PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
   type Localized,
+  type PhotoWallMode,
   type Settings,
 } from "@/lib/defaults";
 
@@ -107,6 +109,14 @@ function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
         allowKids: bool(form, "allowKids"),
         collectPhone: bool(form, "collectPhone"),
       };
+    case "photos": {
+      const mode = str(form, "photoWall");
+      return {
+        photoWall: (PHOTO_WALL_MODES as readonly string[]).includes(mode)
+          ? (mode as PhotoWallMode)
+          : "auto",
+      };
+    }
     case "access":
       // Handled separately — the password never goes through this path.
       return {};

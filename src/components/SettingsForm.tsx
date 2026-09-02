@@ -11,6 +11,7 @@ import {
 } from "@/lib/settings-tabs";
 import {
   Alert,
+  AnchorButton,
   Button,
   FieldsetLabel,
   Hint,
@@ -30,11 +31,13 @@ import {
   cardClass,
 } from "@/components/ui";
 import {
+  PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
   type Localized,
   type Registry,
   type Settings,
 } from "@/lib/defaults";
+import { fill } from "@/lib/i18n/text";
 import { MAX_MEAL_LABEL, MAX_MEAL_LABELS } from "@/lib/meals";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/text";
@@ -282,23 +285,38 @@ function Panel({
   );
 }
 
+/** What the Photos tab shows about Google Drive. Read on the server; never the token. */
+export type DrivePanel = {
+  /** GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set. */
+  configured: boolean;
+  connection: { account: string; folderName: string; folderUrl: string } | null;
+  /** Outcome of a connect or disconnect the host just came back from. */
+  notice: { ok: boolean; text: string } | null;
+  /** The event date, formatted, for the auto-open hint. */
+  eventDate: string;
+};
+
 export function SettingsForm({
   settings,
   t,
   locale,
   hasStoredPassword,
+  drive,
+  initialTab = "event",
 }: {
   settings: Settings;
   t: Dictionary;
   locale: Locale;
   hasStoredPassword: boolean;
+  drive: DrivePanel;
+  initialTab?: SettingsTab;
 }) {
   const [state, formAction] = useActionState<SettingsState, FormData>(saveSettings, {
     status: "idle",
   });
 
   const router = useRouter();
-  const [tab, setTab] = useState<SettingsTab>("event");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [dirty, setDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<SettingsTab | null>(null);
   /** What to do if the host chooses "discard" — leave, rather than switch tab. */
@@ -344,8 +362,15 @@ export function SettingsForm({
     wording: t.settings.sectionText,
     registries: t.settings.sectionRegistry,
     form: t.settings.sectionForm,
+    photos: t.settings.sectionPhotos,
     access: t.settings.sectionAccess,
   };
+
+  const wallModeLabels = {
+    auto: [t.settings.wallModeAuto, fill(t.settings.wallModeAutoHint, { date: drive.eventDate })],
+    open: [t.settings.wallModeOpen, t.settings.wallModeOpenHint],
+    closed: [t.settings.wallModeClosed, t.settings.wallModeClosedHint],
+  } as const;
 
   // A save that succeeded means this tab is clean again.
   useEffect(() => {
@@ -756,6 +781,101 @@ export function SettingsForm({
             </Button>
           </div>
         </Panel>
+      ) : null}
+
+      {tab === "photos" ? (
+        <>
+          <Panel
+            formAction={formAction}
+            panelId={panelId}
+            tab={tab}
+            label={TAB_LABELS[tab]}
+            dirty={dirty}
+            state={state}
+            t={t}
+            onDirty={() => setDirty(true)}
+          >
+            <fieldset>
+              <FieldsetLabel>{t.settings.wallMode}</FieldsetLabel>
+              <div className="space-y-3">
+                {PHOTO_WALL_MODES.map((mode) => (
+                  <label key={mode} className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="photoWall"
+                      value={mode}
+                      defaultChecked={settings.photoWall === mode}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-ink">
+                        {wallModeLabels[mode][0]}
+                      </span>
+                      <span className="block text-xs text-ink-muted">{wallModeLabels[mode][1]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </Panel>
+
+          {/*
+            * Outside the panel's form on purpose: connecting is a link to
+            * Google and disconnecting is its own POST, and neither is a
+            * setting to be saved. A form inside a form is not HTML.
+            */}
+          <section aria-labelledby="drive-title" className={`${cardClass} space-y-4 px-6 py-6`}>
+            <div>
+              <Overline as="h2" id="drive-title" className="mb-1.5">
+                {t.settings.driveTitle}
+              </Overline>
+              <p className="max-w-prose text-sm text-ink-muted">{t.settings.driveIntro}</p>
+            </div>
+
+            {drive.notice ? (
+              <Alert tone={drive.notice.ok ? "positive" : "critical"} role="status">
+                {drive.notice.text}
+              </Alert>
+            ) : null}
+
+            {!drive.configured ? (
+              <p className="text-sm text-ink">{t.settings.driveUnconfigured}</p>
+            ) : drive.connection ? (
+              <div className="space-y-3">
+                <p className="text-sm text-ink">
+                  {fill(t.settings.driveConnected, { account: drive.connection.account })}
+                  {" · "}
+                  <a
+                    href={drive.connection.folderUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-accent underline underline-offset-4"
+                  >
+                    {t.settings.driveFolder}
+                    <span className="sr-only"> ({t.registry.opensInNewTab})</span>
+                  </a>
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <AnchorButton href="/api/google/start" variant="secondary">
+                    {t.settings.driveReconnect}
+                  </AnchorButton>
+                  <form method="post" action="/api/google/disconnect">
+                    <Button type="submit" variant="quiet">
+                      {t.settings.driveDisconnect}
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-ink">{t.settings.driveNotConnected}</p>
+                <AnchorButton href="/api/google/start" variant="primary">
+                  {t.settings.driveConnect}
+                </AnchorButton>
+              </div>
+            )}
+          </section>
+        </>
       ) : null}
 
       {tab === "access" ? (
