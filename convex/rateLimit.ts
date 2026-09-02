@@ -113,6 +113,31 @@ export const succeed = mutation({
 });
 
 /**
+ * Give one count back, for a counter that measures things left open.
+ *
+ * The photo routes count Drive sessions opened per address and hand the
+ * count back when the upload is finished, so what the limit measures is
+ * sessions opened and never finished — which honest guests never
+ * accumulate, however many share the venue's Wi-Fi, and a script that
+ * uploads originals without recording them accumulates at once.
+ */
+export const release = mutation({
+  args: { key: v.string(), id: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { key, id }) => {
+    assertServer(key);
+
+    const row = await ctx.db
+      .query("loginAttempts")
+      .withIndex("by_key", (q) => q.eq("key", id))
+      .unique();
+
+    if (row && row.failures > 0) await ctx.db.patch(row._id, { failures: row.failures - 1 });
+    return null;
+  },
+});
+
+/**
  * A generic "how many times in a window" counter, used to stop someone with
  * the guest password from flooding the RSVP list and wrecking the headcount.
  * Unlike `fail`, this counts every call, not just failures.

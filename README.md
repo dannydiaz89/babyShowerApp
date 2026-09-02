@@ -267,10 +267,12 @@ What's in place:
   server answers `mine: true` per photo — so nobody can hide another phone's
   photos, and nothing a guest does deletes anything. Hosts delete.
 - **Every photo route checks the session itself**, like the Server Actions.
-  Upload session opens and uploads are throttled per device *and* per
-  address; the device cookie is signed, so it cannot be made up to dodge
-  the device limit, and a fresh one costs a page load that the address
-  limit still counts.
+  Uploads are throttled per device (the cookie is signed, so it cannot be
+  made up to dodge this) and, as a backstop set far above what a whole
+  party produces on one Wi-Fi address, per address. What actually answers
+  a script is a count of Drive sessions *opened and never finished* per
+  address: honest guests finish what they open, so that count stays near
+  zero however many share the venue's network.
 - **The Drive refresh token is sealed** (AES-GCM under a key derived from
   `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
   reach your Drive. The site asks Google for the `drive.file` scope only.

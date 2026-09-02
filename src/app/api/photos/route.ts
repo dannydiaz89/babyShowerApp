@@ -16,7 +16,7 @@ import {
   wallState,
   type WallFilter,
 } from "@/lib/photos";
-import { refuse, withinLimits } from "@/lib/photo-routes";
+import { closeOutstanding, refuse, withinLimits } from "@/lib/photo-routes";
 import { getSettings } from "@/lib/settings";
 
 /*
@@ -152,6 +152,8 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return refuse(result.reason === "storage-full" ? "storage-full" : "bad-request", result.reason === "storage-full" ? 503 : 400);
     }
+    // The Drive session this original came through is finished.
+    if (driveFileId) await closeOutstanding();
     return NextResponse.json({ photo: result.photo }, { status: 201 });
   } catch (error) {
     /*

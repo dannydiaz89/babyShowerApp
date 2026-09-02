@@ -170,6 +170,8 @@ beforeEach(() => {
         return { driveFileId: "drive-1" };
       case "photos:discard":
         return { deleted: true };
+      case "rateLimit:release":
+        return null;
       default:
         throw new Error("unexpected mutation");
     }
@@ -270,6 +272,36 @@ describe("POST /api/photos/session", () => {
     expect(limitIds).toEqual(
       expect.arrayContaining([`photos:session:${DEVICE}`, "photos:session:ip:203.0.113.9"])
     );
+  });
+
+  it("counts a Drive session as outstanding for its address, and not when there is no Drive session", async () => {
+    await asGuest();
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+    let ids = called("rateLimit:consume").map(([, args]) => String(args.id));
+    expect(ids).not.toContain("photos:outstanding:ip:203.0.113.9");
+
+    mutation.mockClear();
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+    ids = called("rateLimit:consume").map(([, args]) => String(args.id));
+    expect(ids).toContain("photos:outstanding:ip:203.0.113.9");
+  });
+
+  it("refuses a new Drive session once too many from the address are left open", async () => {
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
+    await asGuest();
+    mutation.mockImplementation(async (fn: unknown, args: Record<string, unknown>) =>
+      getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "rateLimit:consume"
+        ? { allowed: !String(args.id).includes("outstanding"), retryAfterMs: 0 }
+        : { ok: true }
+    );
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    expect(response.status).toBe(429);
+    expect(openUploadSession).not.toHaveBeenCalled();
   });
 
   it("stops when the address is over its limit even if the device is not", async () => {
@@ -466,13 +498,20 @@ describe("POST /api/photos", () => {
     expect(called("photos:create")).toHaveLength(0);
   });
 
-  it("keeps a verified Drive id on the row", async () => {
+  it("keeps a verified Drive id on the row, and closes the address's outstanding session", async () => {
     await asGuest();
 
     await photos.POST(finalizeForm({ driveFileId: "drive-9" }));
 
     expect(verifyUploadedFile).toHaveBeenCalledWith("drive-9");
     expect(called("photos:create")[0][1]).toMatchObject({ driveFileId: "drive-9" });
+    expect(called("rateLimit:release")[0][1]).toMatchObject({ id: "photos:outstanding:ip:203.0.113.9" });
+  });
+
+  it("gives nothing back for a photo that had no Drive session", async () => {
+    await asGuest();
+    await photos.POST(finalizeForm());
+    expect(called("rateLimit:release")).toHaveLength(0);
   });
 
   it("refuses a request with no web copy", async () => {

@@ -16,19 +16,30 @@ import type { PhotoErrorCode } from "@/lib/photo-codes";
 const HOUR = 60 * 60 * 1000;
 
 /**
- * Per hour. The device limits are what a guest feels — ten photos is a
- * handful of requests each. The per-address limits are the backstop: a
- * device id is signed, but a fresh one costs only a page load, so a
- * scripted caller is bounded by where it comes from as well. A venue's
- * shared Wi-Fi puts sixty guests behind one address, which is what the
- * address figures are sized for.
+ * Per hour. Three kinds of limit, for three different callers.
+ *
+ * Per device is what one guest feels: ten photos is ten of each request,
+ * so a hundred and twenty an hour is a very busy guest.
+ *
+ * Per address is a backstop only, and deliberately far above anything a
+ * room produces: the whole party is usually behind the venue's one Wi-Fi
+ * address, and a limit that a big party could reach by uploading normally
+ * would be the wrong trade. Three thousand an hour is three hundred guests
+ * each uploading ten photos in the same hour.
+ *
+ * Outstanding sessions per address is the limit that actually answers a
+ * script. A Drive session that is opened and never finished is the abuse
+ * — originals landing in the hosts' Drive with no photo on the wall —
+ * and honest traffic finishes what it opens, so the count stays near zero
+ * however many guests share the address. Two hundred left open at once is
+ * far past a Wi-Fi hiccup and far short of filling a Drive.
  */
 export const PHOTO_RATE = {
-  sessions: 60,
-  creates: 60,
+  sessions: 120,
+  creates: 120,
   hides: 60,
-  sessionsPerAddress: 900,
-  createsPerAddress: 900,
+  perAddress: 3000,
+  outstandingPerAddress: 200,
 } as const;
 
 /** Who is calling, as an address. Behind Vercel this is the real client. */
@@ -64,7 +75,7 @@ export async function withinLimit(id: string, limit: number): Promise<boolean> {
   }
 }
 
-/** Both limits for one kind of request: the device's and its address's. */
+/** Both limits for one kind of request: the device's and its address's backstop. */
 export async function withinLimits(
   kind: "session" | "create",
   uploaderId: string
@@ -72,12 +83,30 @@ export async function withinLimits(
   const address = await clientAddress();
   const [device, byAddress] = await Promise.all([
     withinLimit(`photos:${kind}:${uploaderId}`, kind === "session" ? PHOTO_RATE.sessions : PHOTO_RATE.creates),
-    withinLimit(
-      `photos:${kind}:ip:${address}`,
-      kind === "session" ? PHOTO_RATE.sessionsPerAddress : PHOTO_RATE.createsPerAddress
-    ),
+    withinLimit(`photos:${kind}:ip:${address}`, PHOTO_RATE.perAddress),
   ]);
   return device && byAddress;
+}
+
+function outstandingId(address: string): string {
+  return `photos:outstanding:ip:${address}`;
+}
+
+/** Count a Drive session as opened; false when too many from this address are still open. */
+export async function openOutstanding(): Promise<boolean> {
+  return withinLimit(outstandingId(await clientAddress()), PHOTO_RATE.outstandingPerAddress);
+}
+
+/** A session was finished — its original has a photo on the wall — so it no longer counts. */
+export async function closeOutstanding(): Promise<void> {
+  try {
+    await convexClient().mutation(api.rateLimit.release, {
+      key: convexKey(),
+      id: outstandingId(await clientAddress()),
+    });
+  } catch (error) {
+    console.error("Releasing an outstanding session failed", error);
+  }
 }
 
 /** A photo id as it arrives in a URL: something Convex could accept, or nothing. */
