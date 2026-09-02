@@ -91,6 +91,19 @@ export default defineSchema({
     // Absent means fall back to the SITE_PASSWORD environment variable.
     guestPasswordHash: v.optional(v.string()),
 
+    /*
+     * When guest sessions were last invalidated.
+     *
+     * Guest cookies are stateless — signed, with nothing on the server to
+     * delete — so changing the password would otherwise leave every session
+     * minted under the old one working for its full 30 days. Bumping this on
+     * every password change gives the signature a floor to be checked against,
+     * which is what makes rotating the password actually revoke access.
+     *
+     * Optional: rows written before this existed read as "never invalidated".
+     */
+    guestSessionEpoch: v.optional(v.number()),
+
     updatedAt: v.number(),
   }).index("by_singleton", ["singleton"]),
 

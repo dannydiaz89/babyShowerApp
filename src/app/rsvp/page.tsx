@@ -3,9 +3,11 @@ import { RsvpForm } from "@/components/RsvpForm";
 import { Eyebrow, PageTitle } from "@/components/ui";
 import { getTranslation, fill, pick, formatDate, formatDateShort } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
-import { isAdminSession } from "@/lib/session";
+import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
 export default async function RsvpPage() {
+  await requireGuestAccess("/rsvp");
+
   const [{ locale, t }, settings, previewing] = await Promise.all([
     getTranslation(),
     getSettings(),

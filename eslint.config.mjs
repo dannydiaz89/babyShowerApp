@@ -19,8 +19,10 @@ const compat = new FlatCompat({
 const config = [
   {
     ignores: [
-      ".next/**",
-      ".next-scratch/**",
+      // Every build output directory, not just the default one: distDir is
+      // overridable (NEXT_DIST_DIR), and an unignored `.next-*` left behind by
+      // a one-off build buries real findings under thousands of generated ones.
+      ".next*/**",
       "node_modules/**",
       // Rewritten by `next build`; not ours to edit.
       "next-env.d.ts",

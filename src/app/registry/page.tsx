@@ -3,7 +3,7 @@ import { Moon } from "@/components/Moon";
 import { Card, cardClass, PageTitle } from "@/components/ui";
 import { getTranslation, fill, pickOptional, present, formatDateShort } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
-import { isAdminSession } from "@/lib/session";
+import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
 /**
  * Registry accents. Tailwind needs whole class names, so the palette is a
@@ -17,6 +17,8 @@ const ACCENT_STYLES: Record<string, string> = {
 };
 
 export default async function RegistryPage() {
+  await requireGuestAccess("/registry");
+
   const [{ locale, t }, settings, previewing] = await Promise.all([
     getTranslation(),
     getSettings(),

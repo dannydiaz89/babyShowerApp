@@ -89,6 +89,14 @@ export const update = mutation({
 /**
  * Store a new guest password. Hashing happens in Next.js; Convex only ever
  * sees the derived key, never the password itself.
+ *
+ * Also moves `guestSessionEpoch` forward, which is what makes a rotation take
+ * effect. Guest cookies are signed rather than stored, so there is no session
+ * row to delete: without this, everyone who signed in under the old password
+ * would keep their access for the remaining 30 days of their cookie, and the
+ * hosts would have no way to tell. Clearing the password (`hash: null`) counts
+ * too — falling back to the environment variable is still a change of
+ * credential, and anyone holding a cookie should have to prove they know it.
  */
 export const setGuestPasswordHash = mutation({
   args: { key: v.string(), hash: v.union(v.string(), v.null()) },
@@ -105,9 +113,11 @@ export const setGuestPasswordHash = mutation({
       throw new Error("Save your event details before setting a guest password.");
     }
 
+    const now = Date.now();
     await ctx.db.patch(existing._id, {
       guestPasswordHash: hash ?? undefined,
-      updatedAt: Date.now(),
+      guestSessionEpoch: now,
+      updatedAt: now,
     });
     return null;
   },

@@ -22,7 +22,7 @@ import {
   formatTimeRange,
 } from "@/lib/i18n";
 import { getSettings } from "@/lib/settings";
-import { isAdminSession } from "@/lib/session";
+import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
 /** Google Calendar wants UTC as YYYYMMDDTHHMMSSZ. */
 function calendarStamp(date: Date): string {
@@ -47,6 +47,8 @@ function calendarRange(startISO: string, endISO: string): string | null {
 }
 
 export default async function InvitationPage() {
+  await requireGuestAccess("/invitation");
+
   const [{ locale, t }, settings, previewing] = await Promise.all([
     getTranslation(),
     getSettings(),
