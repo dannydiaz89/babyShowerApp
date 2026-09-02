@@ -69,16 +69,11 @@ export default async function InvitationPage() {
   const dressCode = pickOptional(settings.dressCode, locale);
   const notes = pickOptional(settings.notes, locale);
 
-  // Only render what the hosts actually filled in — a labelled empty card
-  // reads as a mistake.
-  const whereLines = [settings.venueName, settings.address].filter(present);
-
-  const details = [
-    { label: t.invitation.when, lines: [eventDate, timeRange].filter(present), map: false },
-    ...(whereLines.length > 0
-      ? [{ label: t.invitation.where, lines: whereLines, map: true }]
-      : []),
-  ];
+  /**
+   * The invitation card gets more air beneath it than the cards below it give
+   * one another, so whichever card lands first takes the wider gap.
+   */
+  const gap = (isFirst: boolean) => (isFirst ? "mt-8" : "mt-4");
 
   const contact = contactLine(
     {
@@ -130,6 +125,17 @@ export default async function InvitationPage() {
           {present(settings.address) ? (
             <p className="text-sm text-ink-muted">{settings.address}</p>
           ) : null}
+          {present(settings.venueName) || present(settings.address) ? (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(settings.mapsQuery)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block py-2 text-sm text-accent underline underline-offset-4"
+            >
+              {t.invitation.openInMaps}
+              <span className="sr-only"> ({t.registry.opensInNewTab})</span>
+            </a>
+          ) : null}
 
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <ButtonLink href="/rsvp" variant="primary" className="w-full sm:w-auto">
@@ -155,43 +161,17 @@ export default async function InvitationPage() {
           </p>
         </Card>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2">
-          {details.map((item) => (
-            <Card key={item.label} className="px-6 py-5">
-              <Overline as="h2" className="mb-1.5">
-                {item.label}
-              </Overline>
-              {item.lines.map((line) => (
-                <p key={line} className="text-sm leading-relaxed text-ink">
-                  {line}
-                </p>
-              ))}
-              {item.map ? (
-                <a
-                  href={`https://maps.google.com/?q=${encodeURIComponent(settings.mapsQuery)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-block py-2 text-sm text-accent underline underline-offset-4"
-                >
-                  {t.invitation.openInMaps}
-                  <span className="sr-only"> ({t.registry.opensInNewTab})</span>
-                </a>
-              ) : null}
-            </Card>
-          ))}
-
-          {dressCode ? (
-            <Card className="px-6 py-5 sm:col-span-2">
-              <Overline as="h2" className="mb-1.5">
-                {t.invitation.whatToWear}
-              </Overline>
-              <p className="text-sm leading-relaxed text-ink">{dressCode}</p>
-            </Card>
-          ) : null}
-        </section>
+        {dressCode ? (
+          <Card as="section" className={`${gap(true)} px-6 py-5`}>
+            <Overline as="h2" className="mb-1.5">
+              {t.invitation.whatToWear}
+            </Overline>
+            <p className="text-sm leading-relaxed text-ink">{dressCode}</p>
+          </Card>
+        ) : null}
 
         {notes ? (
-          <Card as="section" className="mt-4 px-6 py-6">
+          <Card as="section" className={`${gap(!dressCode)} px-6 py-6`}>
             <Overline as="h2" className="mb-1.5">
               {t.invitation.aFewNotes}
             </Overline>
@@ -202,7 +182,7 @@ export default async function InvitationPage() {
         {settings.registries.length > 0 ? (
         <Card
           as="section"
-          className="mt-4 flex flex-col items-start justify-between gap-4 px-6 py-6 sm:flex-row sm:items-center"
+          className={`${gap(!dressCode && !notes)} flex flex-col items-start justify-between gap-4 px-6 py-6 sm:flex-row sm:items-center`}
         >
           <div>
             <SectionTitle className="text-xl">{t.invitation.registryTitle}</SectionTitle>
