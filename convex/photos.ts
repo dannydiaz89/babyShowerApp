@@ -150,7 +150,8 @@ const createResult = v.union(
       v.literal("not-uploaded"),
       v.literal("too-large"),
       v.literal("bad-dimensions"),
-      v.literal("storage-full")
+      v.literal("storage-full"),
+      v.literal("bad-session")
     ),
   })
 );
@@ -178,10 +179,35 @@ export const create = mutation({
     driveFileId: v.optional(v.string()),
     originalName: v.optional(v.string()),
     originalBytes: v.optional(v.number()),
+    /** The in-flight reservation this original came through. Required with a Drive id. */
+    sessionId: v.optional(v.id("driveSessions")),
+    /** When Google says the file was created, so it can be tied to the session. */
+    driveCreatedAt: v.optional(v.number()),
   },
   returns: createResult,
   handler: async (ctx, { key, ...args }) => {
     assertServer(key);
+
+    /*
+     * With a Drive original, the reservation is consumed here, in the same
+     * transaction as the row. It must be this device's, still open, big
+     * enough for the file Google reports, and older than that file — so a
+     * reservation cannot be released against some other upload, and one
+     * Drive file cannot be recorded twice to release two.
+     */
+    if (args.driveFileId) {
+      const bad = { ok: false as const, reason: "bad-session" as const };
+      if (!args.sessionId) return bad;
+      const session = await ctx.db.get(args.sessionId);
+      if (!session || session.finalized || session.uploaderId !== args.uploaderId) return bad;
+      if ((args.originalBytes ?? 0) > session.size) return bad;
+      if (args.driveCreatedAt !== undefined && args.driveCreatedAt < session.openedAt - 60_000) return bad;
+      const already = await ctx.db
+        .query("photos")
+        .withIndex("by_driveFileId", (q) => q.eq("driveFileId", args.driveFileId))
+        .first();
+      if (already) return bad;
+    }
 
     const file = await ctx.db.system.get("_storage", args.webStorageId);
     if (!file) return { ok: false as const, reason: "not-uploaded" as const };
@@ -230,6 +256,7 @@ export const create = mutation({
       originalBytes: args.originalBytes,
     });
     await adjustTotals(ctx, { live: 1, bytes: file.size });
+    if (args.sessionId) await ctx.db.delete(args.sessionId);
 
     const view = await toView(ctx, (await ctx.db.get(id))!, args.uploaderId);
     if (!view) throw new Error("The photo could not be read back.");
@@ -304,13 +331,18 @@ export const discard = mutation({
  * here what is accounted for; the rest is nobody's. One index read per id,
  * bounded by the caller's page size.
  */
+export const RECORDED_IDS_BATCH = 500;
+
 export const recordedDriveIds = query({
   args: { key: v.string(), ids: v.array(v.string()) },
   returns: v.array(v.string()),
   handler: async (ctx, { key, ids }) => {
     assertServer(key);
+    // Refused, not trimmed: an id this did not check would read as unrecorded
+    // to the caller, and unrecorded is what gets deleted.
+    if (ids.length > RECORDED_IDS_BATCH) throw new Error(`At most ${RECORDED_IDS_BATCH} ids per call.`);
     const known: string[] = [];
-    for (const id of ids.slice(0, 1000)) {
+    for (const id of ids) {
       const row = await ctx.db
         .query("photos")
         .withIndex("by_driveFileId", (q) => q.eq("driveFileId", id))
@@ -369,18 +401,6 @@ export const openSession = mutation({
   },
 });
 
-/** The photo behind this session was recorded; its bytes leave the budget. */
-export const finalizeSession = mutation({
-  args: { key: v.string(), sessionId: v.id("driveSessions") },
-  returns: v.null(),
-  handler: async (ctx, { key, sessionId }) => {
-    assertServer(key);
-    const row = await ctx.db.get(sessionId);
-    if (row && !row.finalized) await ctx.db.delete(sessionId);
-    return null;
-  },
-});
-
 /* ----------------------------------------------------------- sweeping */
 
 /**
@@ -415,14 +435,24 @@ export const claimSweep = mutation({
  */
 export const sweepOrphanCopies = mutation({
   args: { key: v.string(), olderThanMs: v.number(), max: v.number() },
-  returns: v.object({ deleted: v.number() }),
+  returns: v.object({ deleted: v.number(), done: v.boolean() }),
   handler: async (ctx, { key, olderThanMs, max }) => {
     assertServer(key);
     const cutoff = Date.now() - olderThanMs;
-    const files = await ctx.db.system.query("_storage").take(Math.min(max, 500));
+
+    /*
+     * One page per run, continuing where the last run stopped, so a store
+     * whose first page is all owned files still has its later pages looked
+     * at. The cursor lives on the totals row; a finished walk clears it and
+     * the next run starts over.
+     */
+    const totals = await totalsRow(ctx);
+    const page = await ctx.db.system
+      .query("_storage")
+      .paginate({ numItems: Math.min(max, 500), cursor: totals?.sweepCursor ?? null });
 
     let deleted = 0;
-    for (const file of files) {
+    for (const file of page.page) {
       if (file._creationTime > cutoff) continue;
       const owner = await ctx.db
         .query("photos")
@@ -432,7 +462,11 @@ export const sweepOrphanCopies = mutation({
       await ctx.storage.delete(file._id);
       deleted += 1;
     }
-    return { deleted };
+
+    const next = page.isDone ? undefined : page.continueCursor;
+    if (totals) await ctx.db.patch(totals._id, { sweepCursor: next });
+    else await ctx.db.insert("photoTotals", { singleton: "photos", live: 0, hidden: 0, bytes: 0, sweepCursor: next });
+    return { deleted, done: page.isDone };
   },
 });
 

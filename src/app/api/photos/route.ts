@@ -109,21 +109,30 @@ export async function POST(request: Request) {
   const originalBytes = integer(form.get("originalBytes"), Number.MAX_SAFE_INTEGER) ?? undefined;
 
   const claimedDriveId = String(form.get("driveFileId") ?? "").trim();
+  const sessionId = String(form.get("sessionId") ?? "").trim();
   /*
    * With Drive as the storage, a photo without an original is not what the
    * hosts were promised — whether a bare client skipped the step or the
    * choice changed under a batch in flight. Refused rather than recorded.
+   * The session that reserved the original's bytes comes with it, and the
+   * mutation consumes that reservation in the same transaction as the row.
    */
   if ((await getSettings()).photoStorage === "drive" && !claimedDriveId) {
     return refuse("bad-request", 400);
   }
   let driveFileId: string | undefined;
+  let driveSize: number | undefined;
+  let driveCreatedAt: number | undefined;
   if (claimedDriveId) {
-    if (claimedDriveId.length > 200) return refuse("bad-request", 400);
+    if (claimedDriveId.length > 200 || !/^[A-Za-z0-9_-]{1,64}$/.test(sessionId)) {
+      return refuse("bad-request", 400);
+    }
     try {
       const check = await verifyUploadedFile(claimedDriveId);
       if (!check.ok) return refuse("drive", 400);
       driveFileId = claimedDriveId;
+      driveSize = check.size ?? undefined;
+      driveCreatedAt = check.createdAt ?? undefined;
     } catch (error) {
       console.error("Verifying the Drive upload failed", error);
       await recordDriveFailure(error);
@@ -149,28 +158,14 @@ export async function POST(request: Request) {
       height,
       driveFileId,
       originalName,
-      originalBytes,
+      // What Google says the file is, not what the phone said it would be.
+      originalBytes: driveFileId ? driveSize : originalBytes,
+      sessionId: driveFileId ? (sessionId as Id<"driveSessions">) : undefined,
+      driveCreatedAt,
     });
 
     if (!result.ok) {
       return refuse(result.reason === "storage-full" ? "storage-full" : "bad-request", result.reason === "storage-full" ? 503 : 400);
-    }
-    /*
-     * The original is recorded: its bytes leave the in-flight budget. The
-     * session id is the phone's to send; leaving it out only keeps those
-     * bytes counted for the window, which costs an honest client nothing
-     * and gains a dishonest one nothing.
-     */
-    const sessionId = String(form.get("sessionId") ?? "");
-    if (driveFileId && /^[A-Za-z0-9_-]{1,64}$/.test(sessionId)) {
-      try {
-        await convexClient().mutation(api.photos.finalizeSession, {
-          key: convexKey(),
-          sessionId: sessionId as Id<"driveSessions">,
-        });
-      } catch (error) {
-        console.error("Releasing the in-flight reservation failed", error);
-      }
     }
     // Uploads are when storage gains files; a good moment to tidy both.
     if (driveFileId) {

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as crons from "../crons.js";
 import type * as drive from "../drive.js";
 import type * as guard from "../guard.js";
 import type * as limits from "../limits.js";
@@ -15,6 +16,7 @@ import type * as photos from "../photos.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as rsvps from "../rsvps.js";
 import type * as settings from "../settings.js";
+import type * as tidy from "../tidy.js";
 
 import type {
   ApiFromModules,
@@ -23,6 +25,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
   drive: typeof drive;
   guard: typeof guard;
   limits: typeof limits;
@@ -30,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   rsvps: typeof rsvps;
   settings: typeof settings;
+  tidy: typeof tidy;
 }>;
 
 /**

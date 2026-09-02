@@ -175,8 +175,6 @@ beforeEach(() => {
         return { deleted: true };
       case "photos:openSession":
         return { ok: true, sessionId: "sess-1" };
-      case "photos:finalizeSession":
-        return null;
       case "photos:claimSweep":
         return false;
       default:
@@ -189,7 +187,7 @@ beforeEach(() => {
       : { page: [], continueCursor: "", isDone: true }
   );
   openUploadSession.mockResolvedValue({ sessionUrl: "https://www.googleapis.com/upload/x" });
-  verifyUploadedFile.mockResolvedValue({ ok: true, size: 100 });
+  verifyUploadedFile.mockResolvedValue({ ok: true, size: 100, createdAt: 1_700_000_000_000 });
   deleteFile.mockResolvedValue(true);
 });
 
@@ -523,30 +521,35 @@ describe("POST /api/photos", () => {
     await asGuest();
     verifyUploadedFile.mockResolvedValue({ ok: false });
 
-    const response = await photos.POST(finalizeForm({ driveFileId: "made-up" }));
+    const response = await photos.POST(finalizeForm({ driveFileId: "made-up", sessionId: "sess-1" }));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "drive" });
     expect(called("photos:create")).toHaveLength(0);
   });
 
-  it("keeps a verified Drive id on the row, frees its bytes from the budget, and arranges a tidy", async () => {
+  it("hands the record the verified Drive size, creation time and the session to consume", async () => {
     await asGuest();
     driveConnection = HEALTHY_DRIVE;
 
-    await photos.POST(finalizeForm({ driveFileId: "drive-9", sessionId: "sess-1" }));
+    await photos.POST(finalizeForm({ driveFileId: "drive-9", sessionId: "sess-1", originalBytes: "999999" }));
 
     expect(verifyUploadedFile).toHaveBeenCalledWith("drive-9");
-    expect(called("photos:create")[0][1]).toMatchObject({ driveFileId: "drive-9" });
-    expect(called("photos:finalizeSession")[0][1]).toMatchObject({ sessionId: "sess-1" });
+    expect(called("photos:create")[0][1]).toMatchObject({
+      driveFileId: "drive-9",
+      sessionId: "sess-1",
+      originalBytes: 100,
+      driveCreatedAt: 1_700_000_000_000,
+    });
     expect(scheduleReconcile).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores a session id that could not be one", async () => {
+  it("refuses a Drive original that comes without its session", async () => {
     await asGuest();
     driveConnection = HEALTHY_DRIVE;
-    await photos.POST(finalizeForm({ driveFileId: "drive-9", sessionId: "../x" }));
-    expect(called("photos:finalizeSession")).toHaveLength(0);
+    const response = await photos.POST(finalizeForm({ driveFileId: "drive-9" }));
+    expect(response.status).toBe(400);
+    expect(called("photos:create")).toHaveLength(0);
   });
 
   it("does not touch the Drive folder for a photo that never went there", async () => {

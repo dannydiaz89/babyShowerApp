@@ -178,8 +178,9 @@ describe("the storage cap", () => {
   });
 });
 
+const MB = 1024 * 1024;
+
 describe("the in-flight budget", () => {
-  const MB = 1024 * 1024;
   const opener = (t: T, size: number) =>
     t.mutation(api.photos.openSession, { key: KEY, uploaderId: "dev-a", address: "203.0.113.9", size });
 
@@ -194,14 +195,54 @@ describe("the in-flight budget", () => {
     expect((await opener(t, 1)).ok).toBe(false);
   });
 
-  it("gives the bytes back once the photo is recorded", async () => {
+  /** Record a Drive photo against a session, as the finalize route does. */
+  async function recordWith(t: T, sessionId: Id<"driveSessions">, over: Record<string, unknown> = {}) {
+    return t.mutation(api.photos.create, {
+      key: KEY,
+      uploaderId: "dev-a",
+      webStorageId: await storeCopy(t),
+      width: 10,
+      height: 10,
+      driveFileId: "drive-1",
+      originalBytes: 5 * MB,
+      driveCreatedAt: Date.now(),
+      sessionId,
+      ...over,
+    });
+  }
+
+  it("gives the bytes back only when the photo is recorded against its own session", async () => {
     const t = db();
     const big = await opener(t, PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES);
-    expect(big.ok).toBe(true);
+    if (!big.ok) throw new Error("expected room");
     expect((await opener(t, 1)).ok).toBe(false);
 
-    if (big.ok) await t.mutation(api.photos.finalizeSession, { key: KEY, sessionId: big.sessionId });
+    const recorded = await recordWith(t, big.sessionId, { originalBytes: 100 });
+    expect(recorded.ok).toBe(true);
     expect((await opener(t, 1)).ok).toBe(true);
+  });
+
+  it("refuses to consume a session that is another device's, already used, too small, or older than its file", async () => {
+    const t = db();
+    const session = await opener(t, 5 * MB);
+    if (!session.ok) throw new Error("expected room");
+
+    expect(await recordWith(t, session.sessionId, { uploaderId: "dev-b" })).toEqual({ ok: false, reason: "bad-session" });
+    expect(await recordWith(t, session.sessionId, { originalBytes: 6 * MB })).toEqual({ ok: false, reason: "bad-session" });
+    expect(await recordWith(t, session.sessionId, { driveCreatedAt: Date.now() - 10 * 60 * 1000 })).toEqual({ ok: false, reason: "bad-session" });
+
+    expect((await recordWith(t, session.sessionId)).ok).toBe(true);
+    // Used: a second photo cannot ride the same reservation.
+    const opened = await opener(t, 5 * MB);
+    if (!opened.ok) throw new Error("expected room");
+    expect(await recordWith(t, session.sessionId, { driveFileId: "drive-2" })).toEqual({ ok: false, reason: "bad-session" });
+    // And one Drive file cannot be recorded twice, whatever session it names.
+    expect(await recordWith(t, opened.sessionId, { driveFileId: "drive-1" })).toEqual({ ok: false, reason: "bad-session" });
+  });
+
+  it("requires a session at all for a Drive original", async () => {
+    const t = db();
+    expect(await recordWith(t, undefined as unknown as Id<"driveSessions">, {})).toEqual({ ok: false, reason: "bad-session" });
   });
 
   it("does not count uploads opened before the window", async () => {
@@ -227,6 +268,20 @@ describe("sweeping stored copies", () => {
     expect(await t.mutation(api.photos.claimSweep, { key: KEY, intervalMs: 0 })).toBe(true);
   });
 
+  it("walks the whole store a page at a time, not the first page over and over", async () => {
+    const t = db();
+    // Three owned copies first, then an orphan: with a page of two, the
+    // orphan is only reached on the second run.
+    for (let i = 0; i < 3; i++) await addPhoto(t, "dev-a", { webStorageId: await storeCopy(t) });
+    const orphan = await storeCopy(t);
+
+    const first = await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: -1000, max: 2 });
+    expect(first).toEqual({ deleted: 0, done: false });
+    const second = await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: -1000, max: 2 });
+    expect(second).toEqual({ deleted: 1, done: true });
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(orphan))).toBeNull();
+  });
+
   it("deletes old copies no photo points at, and leaves owned and fresh ones", async () => {
     const t = db();
     const owned = await storeCopy(t);
@@ -234,11 +289,11 @@ describe("sweeping stored copies", () => {
     const orphan = await storeCopy(t);
 
     // Nothing is old enough yet.
-    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: 60_000, max: 100 })).toEqual({ deleted: 0 });
+    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: 60_000, max: 100 })).toEqual({ deleted: 0, done: true });
     // With the cutoff a second in the future, only the orphan goes. (Not
     // zero: creation times are nudged forward to stay unique, so a file
     // stored in the same millisecond as the sweep can sit a hair past "now".)
-    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: -1000, max: 100 })).toEqual({ deleted: 1 });
+    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: -1000, max: 100 })).toEqual({ deleted: 1, done: true });
     expect(await t.run(async (ctx) => ctx.storage.getUrl(orphan))).toBeNull();
     expect(await t.run(async (ctx) => ctx.storage.getUrl(owned))).not.toBeNull();
   });
@@ -294,14 +349,39 @@ describe("drive health", () => {
     expect(await t.mutation(api.drive.claimReconcile, { key: KEY, intervalMs: 60_000 })).toBe(false);
   });
 
-  it("says which Drive ids belong to a recorded photo", async () => {
+  it("says which Drive ids belong to a recorded photo, and refuses more than it will check", async () => {
     const t = db();
-    await addPhoto(t, "dev-a", { driveFileId: "drive-known" });
+    const session = await t.mutation(api.photos.openSession, { key: KEY, uploaderId: "dev-a", address: "x", size: 10 });
+    if (!session.ok) throw new Error("expected room");
+    await t.mutation(api.photos.create, {
+      key: KEY,
+      uploaderId: "dev-a",
+      webStorageId: await storeCopy(t),
+      width: 10,
+      height: 10,
+      driveFileId: "drive-known",
+      originalBytes: 10,
+      driveCreatedAt: Date.now(),
+      sessionId: session.sessionId,
+    });
     const known = await t.query(api.photos.recordedDriveIds, {
       key: KEY,
       ids: ["drive-known", "drive-orphan"],
     });
     expect(known).toEqual(["drive-known"]);
+
+    await expect(
+      t.query(api.photos.recordedDriveIds, { key: KEY, ids: Array.from({ length: 501 }, (_, i) => `id${i}`) })
+    ).rejects.toThrow(/At most 500/);
+  });
+
+  it("keeps the folder cursor between runs and clears it at the end", async () => {
+    const t = db();
+    await t.mutation(api.drive.set, base);
+    await t.mutation(api.drive.setReconcileCursor, { key: KEY, cursor: "page-2" });
+    expect((await t.query(api.drive.get, { key: KEY }))?.reconcileCursor).toBe("page-2");
+    await t.mutation(api.drive.setReconcileCursor, { key: KEY, cursor: null });
+    expect((await t.query(api.drive.get, { key: KEY }))?.reconcileCursor).toBeUndefined();
   });
 
   it("clears the failure on a healthy answer, and on a reconnect", async () => {
@@ -474,7 +554,21 @@ describe("remove", () => {
   it("deletes the row and the stored web copy together, and hands back the Drive id", async () => {
     const t = db();
     const storageId = await storeCopy(t);
-    const photo = await addPhoto(t, "dev-a", { webStorageId: storageId, driveFileId: "drive-123" });
+    const session = await t.mutation(api.photos.openSession, { key: KEY, uploaderId: "dev-a", address: "x", size: 10 });
+    if (!session.ok) throw new Error("expected room");
+    const created = await t.mutation(api.photos.create, {
+      key: KEY,
+      uploaderId: "dev-a",
+      webStorageId: storageId,
+      width: 10,
+      height: 10,
+      driveFileId: "drive-123",
+      originalBytes: 10,
+      driveCreatedAt: Date.now(),
+      sessionId: session.sessionId,
+    });
+    if (!created.ok) throw new Error(created.reason);
+    const photo = created.photo;
 
     const result = await t.mutation(api.photos.remove, { key: KEY, id: photo.id });
 

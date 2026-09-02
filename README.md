@@ -144,6 +144,17 @@ The `drive.file` scope reaches only files and folders the site itself created â€
 never the rest of your Drive. You can revoke it any time from your Google
 account's connected-apps page; the folder and the photos in it stay yours.
 
+**One more variable, on Convex.** A cron on the Convex deployment tidies photo
+storage every ten minutes by calling the site, so it needs to know where the
+site is:
+
+```bash
+pnpm exec convex env set SITE_URL https://your-site.example
+```
+
+Without it the cron logs that it is skipping and the tidy still runs, but
+only when someone is using the site.
+
 ### Running it
 
 The dev server is pinned to **http://localhost:3001** (`next dev --port 3001`).
@@ -274,9 +285,14 @@ What's in place:
   filling the Drive is a budget on originals *in flight*: bytes opened for
   upload and not yet recorded, summed over the last thirty minutes across
   the site. A party's uploads leave that count within seconds of landing;
-  a script's never do, and it stops at the budget. The folder and the
-  site's storage are both tidied on a ten-minute cadence: anything older
-  than thirty minutes that no photo record points at is deleted.
+  a script's never do, and it stops at the budget. The reservation is
+  consumed inside the transaction that records the photo, and only if it
+  is the same device's, unused, at least the size Google reports for the
+  file, and older than the file â€” so it cannot be released against some
+  other upload, and one Drive file records once. The folder and the site's
+  storage are both tidied on a ten-minute cadence by a Convex cron, each
+  continuing from where the last pass stopped: anything older than thirty
+  minutes that no photo record points at is deleted.
 - **The Drive refresh token is sealed** (AES-GCM under a key derived from
   `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
   reach your Drive. The site asks Google for the `drive.file` scope only.
@@ -307,7 +323,7 @@ Known limits, stated plainly:
   wall itself is gated, and nothing links the URLs from outside it.
 - An upload abandoned between the original reaching Drive and the record
   being written leaves a file in the Drive folder with no photo on the wall
-  for up to about forty minutes, until the folder is next tidied.
+  for up to about forty minutes, until the cron next tidies the folder.
 - The photo wall has been tested lightly, not at event load. Convex's free
   tier includes 1 GB of file bandwidth a month; a busy day of scrolling could
   approach it. The direct phone-to-Drive upload should be tried on a real

@@ -191,6 +191,8 @@ export default defineSchema({
     bytes: v.optional(v.number()),
     /** When stored copies were last swept for ones no photo points at. */
     lastSweptAt: v.optional(v.number()),
+    /** Where the sweep left off in the storage listing; absent means start over. */
+    sweepCursor: v.optional(v.string()),
   }).index("by_singleton", ["singleton"]),
 
   /**
@@ -237,6 +239,8 @@ export default defineSchema({
     lastCheckedAt: v.optional(v.number()),
     /** When the folder was last reconciled against the photo rows. */
     lastReconciledAt: v.optional(v.number()),
+    /** Google's page token where the last reconcile stopped; absent means the first page. */
+    reconcileCursor: v.optional(v.string()),
   }).index("by_singleton", ["singleton"]),
 
   /**

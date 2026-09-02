@@ -204,9 +204,31 @@ const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const SWEEP_OLDER_THAN_MS = 30 * 60 * 1000;
 
 /**
- * Arrange a sweep of stored copies after this response, if one is due.
- * The route discards an orphan at once when it can; this catches the
- * ones it could not.
+ * One page of the sweep of stored copies, continuing from where the last
+ * one stopped. The route discards an orphan at once when it can; this
+ * catches the ones it could not.
+ */
+export async function sweepStoredCopies(): Promise<{ deleted: number; done: boolean }> {
+  try {
+    const result = await convexClient().mutation(api.photos.sweepOrphanCopies, {
+      key: convexKey(),
+      olderThanMs: SWEEP_OLDER_THAN_MS,
+      max: 500,
+    });
+    if (result.deleted > 0) {
+      console.log(`Swept ${result.deleted} unowned web cop${result.deleted === 1 ? "y" : "ies"}.`);
+    }
+    return result;
+  } catch (error) {
+    console.error("Sweeping stored copies failed", error);
+    return { deleted: 0, done: false };
+  }
+}
+
+/**
+ * Arrange a sweep after this response, if one is due. The cron in
+ * convex/crons.ts is what guarantees one; this is the same work done
+ * sooner when the site is busy.
  */
 export async function scheduleStorageSweep(): Promise<void> {
   try {
@@ -214,19 +236,7 @@ export async function scheduleStorageSweep(): Promise<void> {
       key: convexKey(),
       intervalMs: SWEEP_INTERVAL_MS,
     });
-    if (!claimed) return;
-    after(async () => {
-      try {
-        const { deleted } = await convexClient().mutation(api.photos.sweepOrphanCopies, {
-          key: convexKey(),
-          olderThanMs: SWEEP_OLDER_THAN_MS,
-          max: 500,
-        });
-        if (deleted > 0) console.log(`Swept ${deleted} unowned web cop${deleted === 1 ? "y" : "ies"}.`);
-      } catch (error) {
-        console.error("Sweeping stored copies failed", error);
-      }
-    });
+    if (claimed) after(() => sweepStoredCopies());
   } catch (error) {
     console.error("Scheduling a storage sweep failed", error);
   }

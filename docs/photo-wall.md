@@ -161,6 +161,22 @@ Second round (six findings), all fixed on the branch:
 - Drive lists a thousand files a page; the reconcile follows page tokens.
 - Cancelling every photo in a batch showed a success screen for nothing.
 
+Third round (five findings), all fixed on the branch:
+
+- The reconcile checked only the first thousand ids of what it listed and
+  would have deleted recorded originals past that. The lookup is batched at
+  a size the query enforces, with a fifteen-hundred-file regression test.
+- The in-flight reservation could be released by finalizing against any
+  Drive file. It is consumed inside the photo-creation transaction, and
+  only for the same device, unused, sized for what Google reports, and
+  older than the file; a Drive file records once.
+- The storage sweep re-read the first page for ever; the folder reconcile
+  restarted at page one and stopped after ten. Both keep a cursor between
+  runs and walk everything.
+- Tidying was request-driven. A Convex cron calls the site's tidy endpoint
+  every ten minutes with the shared server key; `SITE_URL` on Convex points
+  it at the site.
+
 ## Found while verifying
 
 - **Three uploads at once minted three device cookies.** The first request

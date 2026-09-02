@@ -6,8 +6,10 @@ import { convexClient, convexKey } from "@/lib/convex";
 import {
   orphansToDelete,
   RECONCILE_INTERVAL_MS,
+  RECONCILE_PAGES_PER_RUN,
   type FolderFile,
 } from "@/lib/drive-reconcile";
+import { RECORDED_IDS_BATCH } from "../../convex/photos";
 import { open, seal } from "@/lib/seal";
 
 /**
@@ -170,6 +172,7 @@ export type DriveConnection = DriveHealth & {
   folderUrl: string;
   connectedAt: number;
   lastReconciledAt: number | null;
+  reconcileCursor: string | null;
 };
 
 type StoredConnection = DriveConnection & { refreshTokenSealed: string };
@@ -190,6 +193,7 @@ async function storedConnection(): Promise<StoredConnection | null> {
     failedAt: row.failedAt ?? null,
     lastCheckedAt: row.lastCheckedAt ?? null,
     lastReconciledAt: row.lastReconciledAt ?? null,
+    reconcileCursor: row.reconcileCursor ?? null,
   };
 }
 
@@ -438,20 +442,30 @@ export async function openUploadSession({
  */
 export async function verifyUploadedFile(
   fileId: string
-): Promise<{ ok: true; size: number | null } | { ok: false }> {
+): Promise<{ ok: true; size: number | null; createdAt: number | null } | { ok: false }> {
   const connection = await storedConnection();
   if (!connection || !googleConfigured()) return { ok: false };
 
   const accessToken = await accessTokenFor(connection);
   const response = await driveFetch(
     accessToken,
-    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=id,size,parents`
+    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=id,size,parents,createdTime`
   );
   if (!response.ok) return { ok: false };
 
-  const json = (await response.json()) as { id?: string; size?: string; parents?: string[] };
+  const json = (await response.json()) as {
+    id?: string;
+    size?: string;
+    parents?: string[];
+    createdTime?: string;
+  };
   if (json.id !== fileId || !json.parents?.includes(connection.folderId)) return { ok: false };
-  return { ok: true, size: json.size ? Number(json.size) : null };
+  const createdAt = json.createdTime ? Date.parse(json.createdTime) : NaN;
+  return {
+    ok: true,
+    size: json.size ? Number(json.size) : null,
+    createdAt: Number.isFinite(createdAt) ? createdAt : null,
+  };
 }
 
 /* ------------------------------------------------------------- reconcile */
@@ -469,21 +483,23 @@ export async function verifyUploadedFile(
  * Runs after a response, behind `claimReconcile`, so it costs a page load
  * nothing and happens at most once per interval however busy the site is.
  */
-export async function reconcileDriveFolder(): Promise<{ deleted: number }> {
+export async function reconcileDriveFolder(): Promise<{ deleted: number; done: boolean }> {
   const connection = await storedConnection();
-  if (!connection || !googleConfigured()) return { deleted: 0 };
+  if (!connection || !googleConfigured()) return { deleted: 0, done: true };
 
+  const client = convexClient();
   try {
     const accessToken = await accessTokenFor(connection);
     /*
      * Google returns at most a thousand files per page and a token for the
-     * next. Oldest first, a bounded number of pages: what one run does not
-     * reach, the next run will, and the oldest files are the ones that
-     * matter.
+     * next. A run takes a bounded number of pages and keeps the token it
+     * stops on, so the next run carries on from there rather than from the
+     * first page again; a run that reaches the end clears it. Every file
+     * in the folder is therefore looked at, however many there are.
      */
-    const files: FolderFile[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 10; page++) {
+    let pageToken: string | null = connection.reconcileCursor ?? null;
+    let deleted = 0;
+    for (let page = 0; page < RECONCILE_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({
         q: `'${connection.folderId}' in parents and trashed = false`,
         fields: "nextPageToken,files(id,createdTime)",
@@ -494,32 +510,39 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number }> {
       const response = await driveFetch(accessToken, `${DRIVE_API}/files?${params}`);
       if (!response.ok) throw new DriveError(`Google answered ${response.status} listing the folder.`);
       const body = (await response.json()) as { files?: FolderFile[]; nextPageToken?: string };
-      files.push(...(body.files ?? []));
-      pageToken = body.nextPageToken;
+      const files = body.files ?? [];
+
+      /*
+       * Which of these are recorded, asked in batches the query enforces.
+       * An id the query never checked would read as unrecorded, and
+       * unrecorded is what gets deleted — so no id may go unchecked.
+       */
+      const recorded = new Set<string>();
+      for (let i = 0; i < files.length; i += RECORDED_IDS_BATCH) {
+        const batch = files.slice(i, i + RECORDED_IDS_BATCH).map((f) => f.id);
+        for (const id of await client.query(api.photos.recordedDriveIds, { key: convexKey(), ids: batch })) {
+          recorded.add(id);
+        }
+      }
+
+      for (const id of orphansToDelete(files, recorded, Date.now())) {
+        const gone = await driveFetch(accessToken, `${DRIVE_API}/files/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        if (gone.ok || gone.status === 404) deleted += 1;
+      }
+
+      pageToken = body.nextPageToken ?? null;
       if (!pageToken) break;
     }
-    if (files.length === 0) return { deleted: 0 };
 
-    const recorded = new Set(
-      await convexClient().query(api.photos.recordedDriveIds, {
-        key: convexKey(),
-        ids: files.map((f) => f.id),
-      })
-    );
-
-    let deleted = 0;
-    for (const id of orphansToDelete(files, recorded, Date.now())) {
-      const gone = await driveFetch(accessToken, `${DRIVE_API}/files/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-      if (gone.ok || gone.status === 404) deleted += 1;
-    }
+    await client.mutation(api.drive.setReconcileCursor, { key: convexKey(), cursor: pageToken });
     if (deleted > 0) console.log(`Reconciled the Drive folder: ${deleted} unrecorded file(s) removed.`);
-    return { deleted };
+    return { deleted, done: pageToken === null };
   } catch (error) {
     console.error("Reconciling the Drive folder failed", error);
     await recordDriveFailure(error);
-    return { deleted: 0 };
+    return { deleted: 0, done: false };
   }
 }
 

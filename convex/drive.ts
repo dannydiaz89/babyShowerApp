@@ -134,6 +134,18 @@ export const claimReconcile = mutation({
   },
 });
 
+/** Where the folder listing should continue next time; absent to start over. */
+export const setReconcileCursor = mutation({
+  args: { key: v.string(), cursor: v.union(v.string(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { key, cursor }) => {
+    assertServer(key);
+    const existing = await connectionRow(ctx);
+    if (existing) await ctx.db.patch(existing._id, { reconcileCursor: cursor ?? undefined });
+    return null;
+  },
+});
+
 export const clear = mutation({
   args: { key: v.string() },
   returns: v.null(),

@@ -20,8 +20,11 @@ export const RECONCILE_GRACE_MS = 30 * 60 * 1000;
 /** How often the folder is looked at, at most. */
 export const RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
 
-/** The most deletions one run will do; the next run picks up the rest. */
+/** The most deletions one page will do; the next page or run picks up the rest. */
 export const RECONCILE_MAX_DELETES = 200;
+
+/** Pages of the folder listing one run reads before handing the token to the next. */
+export const RECONCILE_PAGES_PER_RUN = 5;
 
 export function orphansToDelete(
   files: FolderFile[],
