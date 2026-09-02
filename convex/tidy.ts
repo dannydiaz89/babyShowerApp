@@ -1,5 +1,5 @@
 "use node";
-import { internalAction } from "./_generated/server";
+import { env, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -22,9 +22,9 @@ export const run = internalAction({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    const site = process.env.SITE_URL || (await ctx.runQuery(internal.site.get, {}));
-    const key = process.env.ADMIN_API_KEY;
-    if (!site || !key) {
+    const site = env.SITE_URL || (await ctx.runQuery(internal.site.get, {}));
+    const key = env.ADMIN_API_KEY;
+    if (!site) {
       console.log("Photo tidy skipped: the site has not recorded its address yet and SITE_URL is not set.");
       return null;
     }

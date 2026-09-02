@@ -183,6 +183,8 @@ export const create = mutation({
     sessionId: v.optional(v.id("driveSessions")),
     /** When Google says the file was created, so it can be tied to the session. */
     driveCreatedAt: v.optional(v.number()),
+    /** The session id the server stamped on the Drive file when it opened the upload. */
+    driveSessionTag: v.optional(v.string()),
   },
   returns: createResult,
   handler: async (ctx, { key, ...args }) => {
@@ -190,14 +192,17 @@ export const create = mutation({
 
     /*
      * With a Drive original, the reservation is consumed here, in the same
-     * transaction as the row. It must be this device's, still open, big
-     * enough for the file Google reports, and older than that file — so a
-     * reservation cannot be released against some other upload, and one
+     * transaction as the row. The file Google holds must carry this very
+     * session's id — stamped by the server when it opened the upload, and
+     * beyond the phone's reach to set — so a reservation can only be
+     * consumed by the upload it authorised. It must also be this device's,
+     * still open, big enough for the file, and older than it; and one
      * Drive file cannot be recorded twice to release two.
      */
     if (args.driveFileId) {
       const bad = { ok: false as const, reason: "bad-session" as const };
       if (!args.sessionId) return bad;
+      if (args.driveSessionTag !== args.sessionId) return bad;
       const session = await ctx.db.get(args.sessionId);
       if (!session || session.finalized || session.uploaderId !== args.uploaderId) return bad;
       if ((args.originalBytes ?? 0) > session.size) return bad;

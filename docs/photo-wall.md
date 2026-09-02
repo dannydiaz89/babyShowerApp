@@ -178,6 +178,19 @@ Third round (five findings), all fixed on the branch:
   origin whenever a host opens an admin page, so the cron finds it without
   a setting; `SITE_URL` on Convex overrides that if ever needed.
 
+Fourth round (four findings), all fixed on the branch:
+
+- A reservation could still be consumed by a different upload of the same
+  device. The session id is now stamped into the Drive file's own metadata
+  when the server opens the upload — the phone's PUT carries only bytes —
+  and recording requires the stamp to match.
+- A rejected page token was retried for ever; it is dropped and the folder
+  walk starts over, once per run.
+- A run could exceed its deadline; it now has a delete and time budget,
+  saves its cursor after every page, and returns to an unfinished page.
+- Convex env is declared in `convex.config.ts` and read through the typed
+  `env`, with the server key required and the site override optional.
+
 ## Found while verifying
 
 - **Three uploads at once minted three device cookies.** The first request

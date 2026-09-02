@@ -187,7 +187,7 @@ beforeEach(() => {
       : { page: [], continueCursor: "", isDone: true }
   );
   openUploadSession.mockResolvedValue({ sessionUrl: "https://www.googleapis.com/upload/x" });
-  verifyUploadedFile.mockResolvedValue({ ok: true, size: 100, createdAt: 1_700_000_000_000 });
+  verifyUploadedFile.mockResolvedValue({ ok: true, size: 100, createdAt: 1_700_000_000_000, sessionTag: "sess-1" });
   deleteFile.mockResolvedValue(true);
 });
 
@@ -243,7 +243,7 @@ describe("POST /api/photos/session", () => {
     });
     expect(cookieJar.get(UPLOADER_COOKIE)).toMatch(/^[a-f0-9]{32}\.[a-f0-9]{64}$/);
     expect(openUploadSession).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "IMG_1.jpg", mimeType: "image/jpeg", origin: BASE })
+      expect.objectContaining({ name: "IMG_1.jpg", mimeType: "image/jpeg", origin: BASE, sessionId: "sess-1" })
     );
   });
 
@@ -540,6 +540,7 @@ describe("POST /api/photos", () => {
       sessionId: "sess-1",
       originalBytes: 100,
       driveCreatedAt: 1_700_000_000_000,
+      driveSessionTag: "sess-1",
     });
     expect(scheduleReconcile).toHaveBeenCalledTimes(1);
   });

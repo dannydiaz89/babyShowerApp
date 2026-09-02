@@ -32,9 +32,13 @@ const FOLDER = "folder-1";
 const requests: { method: string; url: string }[] = [];
 let folder: { id: string; createdTime: string }[] = [];
 let recordedIds: Set<string> = new Set();
+let savedCursor: string | null = null;
+let rejectTokens = false;
 
 beforeEach(async () => {
   requests.length = 0;
+  savedCursor = null;
+  rejectTokens = false;
   mutation.mockReset();
   query.mockReset();
 
@@ -56,6 +60,7 @@ beforeEach(async () => {
           folderName: "Photos",
           folderUrl: "https://drive.example",
           connectedAt: 0,
+          reconcileCursor: savedCursor ?? undefined,
           refreshTokenSealed: await seal("refresh-token", process.env.AUTH_SECRET!),
         };
       case "photos:recordedDriveIds": {
@@ -80,6 +85,9 @@ beforeEach(async () => {
       }
       if (url.startsWith("https://www.googleapis.com/drive/v3/files?")) {
         const params = new URL(url).searchParams;
+        if (rejectTokens && params.get("pageToken")) {
+          return new Response(JSON.stringify({ error: { message: "Invalid Value" } }), { status: 400 });
+        }
         const start = Number(params.get("pageToken") ?? 0);
         const page = folder.slice(start, start + 1000);
         const next = start + 1000 < folder.length ? String(start + 1000) : undefined;
@@ -129,7 +137,37 @@ describe("reconcileDriveFolder", () => {
     const result = await reconcileDriveFolder();
 
     expect(result.done).toBe(false);
-    const cursorCall = mutation.mock.calls.find(([fn]) => getFunctionName(fn) === "drive:setReconcileCursor");
-    expect(cursorCall?.[1]).toMatchObject({ cursor: "5000" });
+    const cursorCalls = mutation.mock.calls.filter(([fn]) => getFunctionName(fn) === "drive:setReconcileCursor");
+    expect(cursorCalls.at(-1)?.[1]).toMatchObject({ cursor: "5000" });
+    // Saved after every page, not only at the end.
+    expect(cursorCalls.length).toBe(5);
+  });
+
+  it("stops at its delete budget, keeps the unfinished page, and resumes it next run", async () => {
+    // 300 orphans on the first page: over one run's budget of 200.
+    folder = Array.from({ length: 1500 }, (_, i) => ({ id: `f${i}`, createdTime: old }));
+    recordedIds = new Set(folder.map((f) => f.id).filter((_, i) => i >= 300));
+
+    const first = await reconcileDriveFolder();
+    expect(first).toEqual({ deleted: 200, done: false });
+    const cursorCalls = mutation.mock.calls.filter(([fn]) => getFunctionName(fn) === "drive:setReconcileCursor");
+    // The page it did not finish is the one it comes back to: the first, cursor null.
+    expect(cursorCalls.at(-1)?.[1]).toMatchObject({ cursor: null });
+  });
+
+  it("throws away a rejected page token and starts the folder over, once", async () => {
+    folder = Array.from({ length: 10 }, (_, i) => ({ id: `f${i}`, createdTime: old }));
+    recordedIds = new Set(folder.map((f) => f.id));
+    savedCursor = "stale-token";
+    rejectTokens = true;
+
+    const result = await reconcileDriveFolder();
+
+    expect(result).toEqual({ deleted: 0, done: true });
+    const listings = requests.filter((r) => r.method === "GET" && r.url.includes("/files?"));
+    expect(listings[0].url).toContain("pageToken=stale-token");
+    expect(listings[1].url).not.toContain("pageToken");
+    // No Drive failure was recorded for a stale token: that is not an outage.
+    expect(mutation.mock.calls.some(([fn]) => getFunctionName(fn) === "drive:setHealth")).toBe(false);
   });
 });

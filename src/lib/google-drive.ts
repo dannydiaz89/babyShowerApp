@@ -6,7 +6,9 @@ import { convexClient, convexKey } from "@/lib/convex";
 import {
   orphansToDelete,
   RECONCILE_INTERVAL_MS,
+  RECONCILE_MAX_DELETES,
   RECONCILE_PAGES_PER_RUN,
+  RECONCILE_TIME_BUDGET_MS,
   type FolderFile,
 } from "@/lib/drive-reconcile";
 import { RECORDED_IDS_BATCH } from "../../convex/photos";
@@ -402,11 +404,20 @@ export async function openUploadSession({
   mimeType,
   size,
   origin,
+  sessionId,
 }: {
   name: string;
   mimeType: string;
   size: number;
   origin: string;
+  /**
+   * The in-flight reservation this upload belongs to. Stamped into the
+   * file's metadata here, at session open, where only the server writes;
+   * the phone's PUT carries bytes and nothing else. Recording the photo
+   * later requires the stamp to match, so a reservation can only ever be
+   * consumed by the upload it authorised.
+   */
+  sessionId: string;
 }): Promise<{ sessionUrl: string } | null> {
   if (!googleConfigured()) return null;
   const connection = await storedConnection();
@@ -424,7 +435,11 @@ export async function openUploadSession({
         "X-Upload-Content-Length": String(size),
         Origin: origin,
       },
-      body: JSON.stringify({ name, parents: [connection.folderId] }),
+      body: JSON.stringify({
+        name,
+        parents: [connection.folderId],
+        appProperties: { session: sessionId },
+      }),
     }
   );
 
@@ -442,14 +457,16 @@ export async function openUploadSession({
  */
 export async function verifyUploadedFile(
   fileId: string
-): Promise<{ ok: true; size: number | null; createdAt: number | null } | { ok: false }> {
+): Promise<
+  { ok: true; size: number | null; createdAt: number | null; sessionTag: string | null } | { ok: false }
+> {
   const connection = await storedConnection();
   if (!connection || !googleConfigured()) return { ok: false };
 
   const accessToken = await accessTokenFor(connection);
   const response = await driveFetch(
     accessToken,
-    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=id,size,parents,createdTime`
+    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=id,size,parents,createdTime,appProperties`
   );
   if (!response.ok) return { ok: false };
 
@@ -458,6 +475,7 @@ export async function verifyUploadedFile(
     size?: string;
     parents?: string[];
     createdTime?: string;
+    appProperties?: Record<string, string>;
   };
   if (json.id !== fileId || !json.parents?.includes(connection.folderId)) return { ok: false };
   const createdAt = json.createdTime ? Date.parse(json.createdTime) : NaN;
@@ -465,6 +483,7 @@ export async function verifyUploadedFile(
     ok: true,
     size: json.size ? Number(json.size) : null,
     createdAt: Number.isFinite(createdAt) ? createdAt : null,
+    sessionTag: json.appProperties?.session ?? null,
   };
 }
 
@@ -488,17 +507,25 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number; done: b
   if (!connection || !googleConfigured()) return { deleted: 0, done: true };
 
   const client = convexClient();
+  const startedAt = Date.now();
+  const saveCursor = (cursor: string | null) =>
+    client.mutation(api.drive.setReconcileCursor, { key: convexKey(), cursor });
+
   try {
     const accessToken = await accessTokenFor(connection);
     /*
      * Google returns at most a thousand files per page and a token for the
-     * next. A run takes a bounded number of pages and keeps the token it
-     * stops on, so the next run carries on from there rather than from the
-     * first page again; a run that reaches the end clears it. Every file
-     * in the folder is therefore looked at, however many there are.
+     * next. A run walks pages until it has read its share, spent its delete
+     * budget, or used its time; the cursor is saved after every page, so
+     * whatever stops a run, the next one carries on from the last page it
+     * finished — and a page it did not finish is listed again, since its
+     * remaining orphans are still there. A run that reaches the end clears
+     * the cursor. Every file in the folder is therefore looked at, however
+     * many there are and however slow Google is on the day.
      */
     let pageToken: string | null = connection.reconcileCursor ?? null;
     let deleted = 0;
+    let restarted = false;
     for (let page = 0; page < RECONCILE_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({
         q: `'${connection.folderId}' in parents and trashed = false`,
@@ -508,6 +535,21 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number; done: b
         ...(pageToken ? { pageToken } : {}),
       });
       const response = await driveFetch(accessToken, `${DRIVE_API}/files?${params}`);
+
+      /*
+       * Page tokens expire, and Google says a rejected one must be thrown
+       * away. A saved token that comes back refused is dropped and the walk
+       * starts from the first page — once; a first page that fails is a
+       * real failure.
+       */
+      if (!response.ok && pageToken && !restarted && response.status >= 400 && response.status < 500) {
+        console.log(`Drive rejected the saved page token (${response.status}); starting the folder over.`);
+        pageToken = null;
+        restarted = true;
+        await saveCursor(null);
+        page -= 1;
+        continue;
+      }
       if (!response.ok) throw new DriveError(`Google answered ${response.status} listing the folder.`);
       const body = (await response.json()) as { files?: FolderFile[]; nextPageToken?: string };
       const files = body.files ?? [];
@@ -525,18 +567,31 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number; done: b
         }
       }
 
-      for (const id of orphansToDelete(files, recorded, Date.now())) {
+      const orphans = orphansToDelete(files, recorded, Date.now(), undefined, Number.MAX_SAFE_INTEGER);
+      let outOfBudget = false;
+      for (const id of orphans) {
+        if (deleted >= RECONCILE_MAX_DELETES || Date.now() - startedAt > RECONCILE_TIME_BUDGET_MS) {
+          outOfBudget = true;
+          break;
+        }
         const gone = await driveFetch(accessToken, `${DRIVE_API}/files/${encodeURIComponent(id)}`, {
           method: "DELETE",
         });
         if (gone.ok || gone.status === 404) deleted += 1;
       }
 
+      if (outOfBudget) {
+        // This page is not finished: come back to it, not past it.
+        await saveCursor(pageToken);
+        if (deleted > 0) console.log(`Reconciled the Drive folder: ${deleted} unrecorded file(s) removed; more next run.`);
+        return { deleted, done: false };
+      }
+
       pageToken = body.nextPageToken ?? null;
-      if (!pageToken) break;
+      await saveCursor(pageToken);
+      if (!pageToken || Date.now() - startedAt > RECONCILE_TIME_BUDGET_MS) break;
     }
 
-    await client.mutation(api.drive.setReconcileCursor, { key: convexKey(), cursor: pageToken });
     if (deleted > 0) console.log(`Reconciled the Drive folder: ${deleted} unrecorded file(s) removed.`);
     return { deleted, done: pageToken === null };
   } catch (error) {

@@ -195,7 +195,7 @@ describe("the in-flight budget", () => {
     expect((await opener(t, 1)).ok).toBe(false);
   });
 
-  /** Record a Drive photo against a session, as the finalize route does. */
+  /** Record a Drive photo against a session, as the finalize route does: the file carries the session's stamp. */
   async function recordWith(t: T, sessionId: Id<"driveSessions">, over: Record<string, unknown> = {}) {
     return t.mutation(api.photos.create, {
       key: KEY,
@@ -207,9 +207,34 @@ describe("the in-flight budget", () => {
       originalBytes: 5 * MB,
       driveCreatedAt: Date.now(),
       sessionId,
+      driveSessionTag: sessionId,
       ...over,
     });
   }
+
+  it("refuses to consume a reservation for a file that was uploaded under a different one", async () => {
+    const t = db();
+    // The swap: open a big reservation and a small one, upload under the
+    // small one, then try to record that file against the big one.
+    const big = await opener(t, 25 * MB);
+    const small = await opener(t, 100);
+    if (!big.ok || !small.ok) throw new Error("expected room");
+
+    const swapped = await recordWith(t, big.sessionId, { originalBytes: 100, driveSessionTag: small.sessionId });
+    expect(swapped).toEqual({ ok: false, reason: "bad-session" });
+    // The big reservation still holds its bytes.
+    expect((await opener(t, PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES - 25 * MB)).ok).toBe(false);
+
+    // Recorded against the reservation it was actually uploaded under, it goes through.
+    expect((await recordWith(t, small.sessionId, { originalBytes: 100 })).ok).toBe(true);
+  });
+
+  it("refuses a Drive file with no stamp at all", async () => {
+    const t = db();
+    const session = await opener(t, 5 * MB);
+    if (!session.ok) throw new Error("expected room");
+    expect(await recordWith(t, session.sessionId, { driveSessionTag: undefined })).toEqual({ ok: false, reason: "bad-session" });
+  });
 
   it("gives the bytes back only when the photo is recorded against its own session", async () => {
     const t = db();
@@ -380,6 +405,7 @@ describe("drive health", () => {
       originalBytes: 10,
       driveCreatedAt: Date.now(),
       sessionId: session.sessionId,
+      driveSessionTag: session.sessionId,
     });
     const known = await t.query(api.photos.recordedDriveIds, {
       key: KEY,
@@ -583,6 +609,7 @@ describe("remove", () => {
       originalBytes: 10,
       driveCreatedAt: Date.now(),
       sessionId: session.sessionId,
+      driveSessionTag: session.sessionId,
     });
     if (!created.ok) throw new Error(created.reason);
     const photo = created.photo;

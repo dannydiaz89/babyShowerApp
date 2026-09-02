@@ -123,6 +123,7 @@ export async function POST(request: Request) {
   let driveFileId: string | undefined;
   let driveSize: number | undefined;
   let driveCreatedAt: number | undefined;
+  let driveSessionTag: string | undefined;
   if (claimedDriveId) {
     if (claimedDriveId.length > 200 || !/^[A-Za-z0-9_-]{1,64}$/.test(sessionId)) {
       return refuse("bad-request", 400);
@@ -133,6 +134,7 @@ export async function POST(request: Request) {
       driveFileId = claimedDriveId;
       driveSize = check.size ?? undefined;
       driveCreatedAt = check.createdAt ?? undefined;
+      driveSessionTag = check.sessionTag ?? undefined;
     } catch (error) {
       console.error("Verifying the Drive upload failed", error);
       await recordDriveFailure(error);
@@ -162,6 +164,7 @@ export async function POST(request: Request) {
       originalBytes: driveFileId ? driveSize : originalBytes,
       sessionId: driveFileId ? (sessionId as Id<"driveSessions">) : undefined,
       driveCreatedAt,
+      driveSessionTag,
     });
 
     if (!result.ok) {

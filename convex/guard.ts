@@ -1,10 +1,12 @@
+import { env } from "./_generated/server";
+
 /**
  * Convex functions are reachable by anyone who knows the deployment URL, so
  * every function requires a shared key that only the Next.js server holds.
  * The browser never talks to Convex directly.
  */
 export function assertServer(key: string) {
-  const expected = process.env.ADMIN_API_KEY;
+  const expected = env.ADMIN_API_KEY;
   if (!expected) throw new Error("ADMIN_API_KEY is not set on the Convex deployment.");
 
   // Constant-time compare, so a wrong key can't be discovered byte by byte.

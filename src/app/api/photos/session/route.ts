@@ -83,6 +83,7 @@ export async function POST(request: Request) {
       mimeType: type,
       size,
       origin: new URL(request.url).origin,
+      sessionId,
     });
     if (!session) return refuse("paused", 503);
     // Opening is when the folder gains files; tidy it on the same cadence.

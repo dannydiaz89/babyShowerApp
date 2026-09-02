@@ -20,8 +20,14 @@ export const RECONCILE_GRACE_MS = 30 * 60 * 1000;
 /** How often the folder is looked at, at most. */
 export const RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
 
-/** The most deletions one page will do; the next page or run picks up the rest. */
+/**
+ * One run's budget: this many deletions, or this much time, whichever
+ * comes first. The folder is walked in pages and the cursor is saved after
+ * each, so a run that stops on either budget resumes where it stopped.
+ * Sized to finish well inside the cron's request and the route's ceiling.
+ */
 export const RECONCILE_MAX_DELETES = 200;
+export const RECONCILE_TIME_BUDGET_MS = 25_000;
 
 /** Pages of the folder listing one run reads before handing the token to the next. */
 export const RECONCILE_PAGES_PER_RUN = 5;
