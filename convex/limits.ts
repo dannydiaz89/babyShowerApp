@@ -86,3 +86,18 @@ export const PHOTO_PAGE_SIZE = 24;
 
 /** The optional name shown under a guest's photos. */
 export const PHOTO_UPLOADER_NAME_MAX = 60;
+
+/**
+ * How many bytes of originals may be on their way to Drive — opened and not
+ * yet recorded — across the whole site, over the window below.
+ *
+ * This is what tells a party apart from a script. A hundred and fifty
+ * guests with three 5 MB uploads in flight each hold about 2 GB open at
+ * the busiest moment, and each upload leaves the count within seconds of
+ * landing. A script that opens uploads and never records them holds its
+ * bytes for the whole window, and stops at the budget: at most this much
+ * of the hosts' Drive can ever be filled with unrecorded files, and the
+ * folder reconcile takes those back.
+ */
+export const PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
+export const PHOTO_DRIVE_INFLIGHT_WINDOW_MS = 30 * 60 * 1000;

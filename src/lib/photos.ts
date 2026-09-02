@@ -13,7 +13,14 @@ import {
 } from "../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
 import type { PhotoStorage } from "@/lib/defaults";
-import { getDriveConnection, googleConfigured, scheduleReprobe } from "@/lib/google-drive";
+import {
+  getDriveConnection,
+  googleConfigured,
+  scheduleReconcile,
+  scheduleReprobe,
+} from "@/lib/google-drive";
+import { clientAddress, mintAllowed } from "@/lib/photo-routes";
+import { after } from "next/server";
 import {
   UPLOADER_COOKIE,
   mintUploaderCookie,
@@ -43,14 +50,16 @@ export async function currentUploaderId(): Promise<string | null> {
  * Normally the middleware has already set it on the page load. This is the
  * fallback for a request that arrived without one — and the reason it must
  * stay a fallback: three uploads starting together with no cookie would
- * each mint their own here.
+ * each mint their own here. Minting is rationed per address, here as in
+ * the middleware; null means this address has had its share.
  */
-export async function ensureUploaderId(): Promise<string> {
+export async function ensureUploaderId(): Promise<string | null> {
   const existing = await currentUploaderId();
   if (existing) return existing;
+  if (!(await mintAllowed(await clientAddress()))) return null;
   const signed = await mintUploaderCookie();
   (await cookies()).set(UPLOADER_COOKIE, signed, uploaderCookieOptions());
-  return (await readUploaderCookie(signed))!;
+  return readUploaderCookie(signed);
 }
 
 export type Caller = {
@@ -90,7 +99,13 @@ export const storageStatus = cache(async (): Promise<StorageStatus> => {
   const settings = await getSettings();
   const [connection, totals] = await Promise.all([
     settings.photoStorage === "drive" && googleConfigured()
-      ? getDriveConnection().then((c) => (c ? scheduleReprobe(c) : null))
+      ? getDriveConnection().then(async (c) => {
+          if (!c) return null;
+          // Any page load may tidy the folder, so an abandoned upload does
+          // not wait for the next successful one to be noticed.
+          await scheduleReconcile(c);
+          return scheduleReprobe(c);
+        })
       : Promise.resolve(null),
     loadTotals().catch((error) => {
       console.error("Reading the photo totals failed", error);
@@ -182,6 +197,39 @@ export async function storeWebCopy(copy: Blob): Promise<Id<"_storage">> {
 
   const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
   return storageId;
+}
+
+/** How often stored copies are swept for orphans, at most, and how old one must be. */
+const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+const SWEEP_OLDER_THAN_MS = 30 * 60 * 1000;
+
+/**
+ * Arrange a sweep of stored copies after this response, if one is due.
+ * The route discards an orphan at once when it can; this catches the
+ * ones it could not.
+ */
+export async function scheduleStorageSweep(): Promise<void> {
+  try {
+    const claimed = await convexClient().mutation(api.photos.claimSweep, {
+      key: convexKey(),
+      intervalMs: SWEEP_INTERVAL_MS,
+    });
+    if (!claimed) return;
+    after(async () => {
+      try {
+        const { deleted } = await convexClient().mutation(api.photos.sweepOrphanCopies, {
+          key: convexKey(),
+          olderThanMs: SWEEP_OLDER_THAN_MS,
+          max: 500,
+        });
+        if (deleted > 0) console.log(`Swept ${deleted} unowned web cop${deleted === 1 ? "y" : "ies"}.`);
+      } catch (error) {
+        console.error("Sweeping stored copies failed", error);
+      }
+    });
+  } catch (error) {
+    console.error("Scheduling a storage sweep failed", error);
+  }
 }
 
 /** Best effort: remove a stored copy that ended up with no photo row. */

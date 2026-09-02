@@ -4,7 +4,14 @@ import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import { Alert, ButtonLink, PageTitle } from "@/components/ui";
 import { getDriveConnection, googleConfigured, scheduleReconcile } from "@/lib/google-drive";
 import { fill, getTranslation } from "@/lib/i18n";
-import { loadTotals, loadWallPage, storageStatus, wallState, type WallFilter } from "@/lib/photos";
+import {
+  loadTotals,
+  loadWallPage,
+  scheduleStorageSweep,
+  storageStatus,
+  wallState,
+  type WallFilter,
+} from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 
 /*
@@ -52,7 +59,8 @@ export default async function AdminPhotosPage({
       ? getDriveConnection().catch(() => null)
       : Promise.resolve(null),
   ]);
-  if (connection) await scheduleReconcile();
+  if (connection) await scheduleReconcile(connection);
+  await scheduleStorageSweep();
 
   const counts: Record<WallFilter, number> = {
     all: totals.live + totals.hidden,

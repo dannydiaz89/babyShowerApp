@@ -98,15 +98,23 @@ export function deletePhoto(id: string) {
 
 /* --------------------------------------------------------------- upload */
 
-/** Where the original should go, or null when the hosts have no Drive connected. */
-export async function openUploadSession(file: File, signal?: AbortSignal): Promise<string | null> {
-  const { sessionUrl } = await call<{ sessionUrl: string | null }>("/api/photos/session", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
-    signal,
-  });
-  return sessionUrl;
+export type UploadSession = { sessionUrl: string; sessionId: string };
+
+/** Where the original should go, or null when originals are not kept. */
+export async function openUploadSession(
+  file: File,
+  signal?: AbortSignal
+): Promise<UploadSession | null> {
+  const { sessionUrl, sessionId } = await call<{ sessionUrl: string | null; sessionId?: string }>(
+    "/api/photos/session",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
+      signal,
+    }
+  );
+  return sessionUrl ? { sessionUrl, sessionId: sessionId ?? "" } : null;
 }
 
 /**
@@ -157,6 +165,7 @@ export async function finalizeUpload(
     width,
     height,
     driveFileId,
+    sessionId,
     originalName,
     originalBytes,
     uploaderName,
@@ -165,6 +174,7 @@ export async function finalizeUpload(
     width: number;
     height: number;
     driveFileId: string | null;
+    sessionId: string | null;
     originalName: string;
     originalBytes: number;
     uploaderName: string;
@@ -176,6 +186,7 @@ export async function finalizeUpload(
   form.append("width", String(width));
   form.append("height", String(height));
   if (driveFileId) form.append("driveFileId", driveFileId);
+  if (driveFileId && sessionId) form.append("sessionId", sessionId);
   form.append("originalName", originalName);
   form.append("originalBytes", String(originalBytes));
   if (uploaderName) form.append("uploaderName", uploaderName);

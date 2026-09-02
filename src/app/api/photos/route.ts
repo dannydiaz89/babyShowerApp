@@ -6,12 +6,14 @@ import {
   PHOTO_WEB_MAX_BYTES,
 } from "../../../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
-import { recordDriveFailure, scheduleReconcile, verifyUploadedFile } from "@/lib/google-drive";
+import { getDriveConnection, recordDriveFailure, scheduleReconcile, verifyUploadedFile } from "@/lib/google-drive";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   discardWebCopy,
   ensureUploaderId,
   loadWallPage,
   photoCaller,
+  scheduleStorageSweep,
   storeWebCopy,
   wallState,
   type WallFilter,
@@ -82,6 +84,7 @@ export async function POST(request: Request) {
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
+  if (!uploaderId) return refuse("rate-limited", 429);
   if (!(await withinLimits("create", uploaderId))) return refuse("rate-limited", 429);
 
   let form: FormData;
@@ -152,8 +155,29 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return refuse(result.reason === "storage-full" ? "storage-full" : "bad-request", result.reason === "storage-full" ? 503 : 400);
     }
-    // Uploads are when the folder gains files; a good moment to tidy it.
-    if (driveFileId) await scheduleReconcile();
+    /*
+     * The original is recorded: its bytes leave the in-flight budget. The
+     * session id is the phone's to send; leaving it out only keeps those
+     * bytes counted for the window, which costs an honest client nothing
+     * and gains a dishonest one nothing.
+     */
+    const sessionId = String(form.get("sessionId") ?? "");
+    if (driveFileId && /^[A-Za-z0-9_-]{1,64}$/.test(sessionId)) {
+      try {
+        await convexClient().mutation(api.photos.finalizeSession, {
+          key: convexKey(),
+          sessionId: sessionId as Id<"driveSessions">,
+        });
+      } catch (error) {
+        console.error("Releasing the in-flight reservation failed", error);
+      }
+    }
+    // Uploads are when storage gains files; a good moment to tidy both.
+    if (driveFileId) {
+      const connection = await getDriveConnection();
+      if (connection) await scheduleReconcile(connection);
+    }
+    await scheduleStorageSweep();
     return NextResponse.json({ photo: result.photo }, { status: 201 });
   } catch (error) {
     /*

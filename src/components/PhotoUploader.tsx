@@ -170,16 +170,17 @@ export function PhotoUploader({
 
   /** The site refused the batch as a whole: stop everything and send the guest back. */
   function pauseBatch(full: boolean) {
+    queueRef.current = [];
     for (const item of itemsRef.current) item.controller?.abort();
     setPausedFull(full);
     setPhase("paused");
   }
 
   /**
-   * Where the batch stands once nothing is moving: finished when every
-   * counted photo is done, otherwise still uploading (something failed or
-   * is waiting). Runs after every upload ends, including a single retry,
-   * so a last retry that succeeds reaches the success screen.
+   * Where the batch stands once nothing is moving. Finished only when at
+   * least one photo is done and none is failed, waiting or still being
+   * prepared; a batch whose every photo was cancelled goes back to
+   * picking rather than to a success screen with nothing in it.
    */
   function settle() {
     setItems((current) => {
@@ -187,19 +188,72 @@ export function PhotoUploader({
         ["queued", "uploading", "preparing", "ready"].includes(i.status)
       );
       const failed = current.some((i) => i.status === "failed");
-      setPhase((phase) =>
-        phase === "paused" || phase === "pick" ? phase : moving || failed ? "uploading" : "finished"
-      );
+      const done = current.some((i) => i.status === "done");
+      setPhase((phase) => {
+        if (phase === "paused") return phase;
+        if (moving || failed) return "uploading";
+        return done ? "finished" : "pick";
+      });
       return current;
     });
   }
 
-  /** One failed photo again. Locked at once so a second tap cannot start it twice. */
-  async function retryOne(item: Item) {
+  /*
+   * One queue and at most three lanes, whoever adds to it: the first
+   * submit, a retry of one photo, a retry of several. A lane pulls from
+   * the queue until it is empty; when the last lane stops, the batch is
+   * settled. Refs rather than state, because lanes are long-lived async
+   * loops and a stale closure over state would start a fourth.
+   */
+  const queueRef = useRef<Item[]>([]);
+  const lanesRef = useRef(0);
+  const gateRef = useRef<Promise<void> | null>(null);
+
+  function enqueue(batch: Item[], uploaderName: string) {
+    const fresh = batch.filter((i) => !queueRef.current.some((q) => q.key === i.key));
+    if (fresh.length === 0) return;
+    // Locked at once, so a second tap on the same photo adds nothing.
+    setItems((current) =>
+      current.map((i) => (fresh.some((f) => f.key === i.key) ? { ...i, status: "queued" } : i))
+    );
+    queueRef.current.push(...fresh);
+
+    /*
+     * The first session of a batch opens alone: it is the request that gives
+     * a device its cookie when nothing else has, and three at once would
+     * each mint their own. Later lanes wait on it.
+     */
+    let firstOpened: () => void = () => {};
+    if (!gateRef.current) {
+      gateRef.current = new Promise<void>((resolve) => {
+        firstOpened = resolve;
+      });
+    }
+    const gate = gateRef.current;
+
+    while (lanesRef.current < CONCURRENCY && queueRef.current.length > lanesRef.current) {
+      const index = lanesRef.current;
+      lanesRef.current += 1;
+      void (async () => {
+        if (index > 0) await gate;
+        for (;;) {
+          const next = queueRef.current.shift();
+          if (!next) break;
+          await uploadOne(next, uploaderName, index === 0 ? firstOpened : undefined);
+        }
+        lanesRef.current -= 1;
+        if (lanesRef.current === 0) {
+          gateRef.current = null;
+          settle();
+        }
+      })();
+    }
+  }
+
+  /** One failed photo again, through the same lanes as everything else. */
+  function retryOne(item: Item) {
     if (item.status !== "failed") return;
-    patch(item.key, { status: "queued" });
-    await uploadOne(item, name.trim());
-    settle();
+    enqueue([item], name.trim());
   }
 
   function pick(list: FileList | File[] | null) {
@@ -240,6 +294,7 @@ export function PhotoUploader({
   }
 
   function remove(item: Item) {
+    queueRef.current = queueRef.current.filter((q) => q.key !== item.key);
     item.controller?.abort();
     if (item.thumbUrl) URL.revokeObjectURL(item.thumbUrl);
     setItems((current) => current.filter((i) => i.key !== item.key));
@@ -251,17 +306,17 @@ export function PhotoUploader({
     const controller = new AbortController();
     patch(item.key, { status: "uploading", controller, error: null, sent: 0 });
     try {
-      let sessionUrl: string | null;
+      let session: Awaited<ReturnType<typeof openUploadSession>>;
       try {
-        sessionUrl = await openUploadSession(item.file, controller.signal);
+        session = await openUploadSession(item.file, controller.signal);
       } finally {
         onSessionOpened?.();
       }
 
       let driveFileId: string | null = null;
-      if (sessionUrl) {
+      if (session) {
         driveFileId = await putToDrive(
-          sessionUrl,
+          session.sessionUrl,
           item.file,
           (sent) => patch(item.key, { sent }),
           controller.signal
@@ -276,6 +331,7 @@ export function PhotoUploader({
           width: prepared.width,
           height: prepared.height,
           driveFileId,
+          sessionId: session?.sessionId ?? null,
           originalName: item.file.name,
           originalBytes: item.file.size,
           uploaderName,
@@ -296,7 +352,7 @@ export function PhotoUploader({
     }
   }
 
-  async function submit() {
+  function submit() {
     const uploaderName = name.trim();
     rememberName(uploaderName);
 
@@ -307,34 +363,7 @@ export function PhotoUploader({
     if (queue.length === 0) return;
 
     setPhase("uploading");
-    setItems((current) =>
-      current.map((i) => (queue.some((q) => q.key === i.key) ? { ...i, status: "queued" } : i))
-    );
-
-    /*
-     * Three lanes pulling from one queue, so a slow file holds one lane, not
-     * all. The first session is opened before the other lanes start: it is
-     * the request that gives a device its cookie when nothing else has, and
-     * three such requests at once would each mint their own.
-     */
-    const pending = [...queue];
-    let firstOpened: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      firstOpened = resolve;
-    });
-
-    const lane = async (index: number) => {
-      if (index > 0) await gate;
-      for (;;) {
-        const next = pending.shift();
-        if (!next) return;
-        await uploadOne(next, uploaderName, index === 0 ? firstOpened : undefined);
-      }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, pending.length) }, (_, i) => lane(i))
-    );
-    settle();
+    enqueue(queue, uploaderName);
   }
 
   /* --------------------------------------------------------- progress */
@@ -490,7 +519,7 @@ export function PhotoUploader({
               item={item}
               phase={phase}
               onRemove={() => remove(item)}
-              onRetry={() => void retryOne(item)}
+              onRetry={() => retryOne(item)}
               t={t}
             />
           ))}
@@ -521,7 +550,7 @@ export function PhotoUploader({
         <Button
           type="button"
           className="w-full"
-          onClick={() => void submit()}
+          onClick={submit}
           disabled={inFlight || preparing || uploadable.length === 0}
         >
           {inFlight

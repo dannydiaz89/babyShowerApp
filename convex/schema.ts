@@ -189,7 +189,23 @@ export default defineSchema({
     hidden: v.number(),
     /** Web-copy bytes across live and hidden photos, against the storage cap. Optional: older rows read as 0. */
     bytes: v.optional(v.number()),
+    /** When stored copies were last swept for ones no photo points at. */
+    lastSweptAt: v.optional(v.number()),
   }).index("by_singleton", ["singleton"]),
+
+  /**
+   * One Drive upload the site opened for a phone: how big, when, and
+   * whether the photo was recorded afterwards. The sum of unrecorded sizes
+   * over the recent window is the in-flight budget in convex/limits.ts.
+   * Rows are swept once they are well past the window.
+   */
+  driveSessions: defineTable({
+    uploaderId: v.string(),
+    address: v.string(),
+    size: v.number(),
+    openedAt: v.number(),
+    finalized: v.boolean(),
+  }).index("by_finalized_openedAt", ["finalized", "openedAt"]),
 
   /**
    * The hosts' Google Drive, connected once from Settings.

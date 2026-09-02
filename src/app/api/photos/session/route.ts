@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { PHOTO_ORIGINAL_MAX_BYTES } from "../../../../../convex/limits";
-import { openUploadSession, recordDriveFailure } from "@/lib/google-drive";
+import { api } from "../../../../../convex/_generated/api";
+import { convexClient, convexKey } from "@/lib/convex";
+import { getDriveConnection, openUploadSession, recordDriveFailure, scheduleReconcile } from "@/lib/google-drive";
 import { ensureUploaderId, photoCaller, wallState } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
-import { refuse, withinLimits } from "@/lib/photo-routes";
+import { clientAddress, refuse, withinLimits } from "@/lib/photo-routes";
 
 /*
  * POST /api/photos/session
@@ -35,6 +37,7 @@ export async function POST(request: Request) {
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
+  if (!uploaderId) return refuse("rate-limited", 429);
   if (!(await withinLimits("session", uploaderId))) return refuse("rate-limited", 429);
 
   let body: Body;
@@ -54,6 +57,26 @@ export async function POST(request: Request) {
   const { photoStorage } = await getSettings();
   if (photoStorage !== "drive") return NextResponse.json({ sessionUrl: null });
 
+  /*
+   * Room in the in-flight budget first: the bytes about to head for Drive
+   * count as open until the photo is recorded. This, not the request
+   * counts, is what stops a script filling the folder — see limits.ts.
+   */
+  let sessionId: string;
+  try {
+    const reserved = await convexClient().mutation(api.photos.openSession, {
+      key: convexKey(),
+      uploaderId,
+      address: await clientAddress(),
+      size,
+    });
+    if (!reserved.ok) return refuse("rate-limited", 429);
+    sessionId = reserved.sessionId;
+  } catch (error) {
+    console.error("Reserving in-flight room failed", error);
+    return refuse("failed", 500);
+  }
+
   try {
     const session = await openUploadSession({
       name,
@@ -62,7 +85,10 @@ export async function POST(request: Request) {
       origin: new URL(request.url).origin,
     });
     if (!session) return refuse("paused", 503);
-    return NextResponse.json({ sessionUrl: session.sessionUrl });
+    // Opening is when the folder gains files; tidy it on the same cadence.
+    const connection = await getDriveConnection();
+    if (connection) await scheduleReconcile(connection);
+    return NextResponse.json({ sessionUrl: session.sessionUrl, sessionId });
   } catch (error) {
     console.error("Opening a Drive upload session failed", error);
     await recordDriveFailure(error);

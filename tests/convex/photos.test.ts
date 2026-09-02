@@ -4,7 +4,11 @@ import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { PHOTO_STORAGE_CAP_BYTES, PHOTO_WEB_MAX_BYTES } from "../../convex/limits";
+import {
+  PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES,
+  PHOTO_STORAGE_CAP_BYTES,
+  PHOTO_WEB_MAX_BYTES,
+} from "../../convex/limits";
 
 /**
  * The photo functions against a real database.
@@ -171,6 +175,72 @@ describe("the storage cap", () => {
     await t.mutation(api.photos.remove, { key: KEY, id: a.id });
     await t.mutation(api.photos.remove, { key: KEY, id: b.id });
     expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+  });
+});
+
+describe("the in-flight budget", () => {
+  const MB = 1024 * 1024;
+  const opener = (t: T, size: number) =>
+    t.mutation(api.photos.openSession, { key: KEY, uploaderId: "dev-a", address: "203.0.113.9", size });
+
+  it("lets a party's uploads through and stops what would pass the budget", async () => {
+    const t = db();
+    // A room's worth of originals in flight at once, well inside the budget.
+    for (let i = 0; i < 100; i++) expect((await opener(t, 5 * MB)).ok).toBe(true);
+
+    // Then one that would tip it over.
+    const nearly = PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES - 100 * 5 * MB;
+    expect((await opener(t, nearly)).ok).toBe(true);
+    expect((await opener(t, 1)).ok).toBe(false);
+  });
+
+  it("gives the bytes back once the photo is recorded", async () => {
+    const t = db();
+    const big = await opener(t, PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES);
+    expect(big.ok).toBe(true);
+    expect((await opener(t, 1)).ok).toBe(false);
+
+    if (big.ok) await t.mutation(api.photos.finalizeSession, { key: KEY, sessionId: big.sessionId });
+    expect((await opener(t, 1)).ok).toBe(true);
+  });
+
+  it("does not count uploads opened before the window", async () => {
+    const t = db();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("driveSessions", {
+        uploaderId: "dev-old",
+        address: "x",
+        size: PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES,
+        openedAt: Date.now() - 2 * 60 * 60 * 1000,
+        finalized: false,
+      });
+    });
+    expect((await opener(t, 1)).ok).toBe(true);
+  });
+});
+
+describe("sweeping stored copies", () => {
+  it("claims once per interval", async () => {
+    const t = db();
+    expect(await t.mutation(api.photos.claimSweep, { key: KEY, intervalMs: 60_000 })).toBe(true);
+    expect(await t.mutation(api.photos.claimSweep, { key: KEY, intervalMs: 60_000 })).toBe(false);
+    expect(await t.mutation(api.photos.claimSweep, { key: KEY, intervalMs: 0 })).toBe(true);
+  });
+
+  it("deletes old copies no photo points at, and leaves owned and fresh ones", async () => {
+    const t = db();
+    const owned = await storeCopy(t);
+    await addPhoto(t, "dev-a", { webStorageId: owned });
+    const orphan = await storeCopy(t);
+
+    // Nothing is old enough yet.
+    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: 60_000, max: 100 })).toEqual({ deleted: 0 });
+    // With the cutoff a second in the future, only the orphan goes. (Not
+    // zero: creation times are nudged forward to stay unique, so a file
+    // stored in the same millisecond as the sweep can sit a hair past "now".)
+    expect(await t.mutation(api.photos.sweepOrphanCopies, { key: KEY, olderThanMs: -1000, max: 100 })).toEqual({ deleted: 1 });
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(orphan))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(owned))).not.toBeNull();
   });
 });
 

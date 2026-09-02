@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { assertServer } from "./guard";
 import {
+  PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES,
+  PHOTO_DRIVE_INFLIGHT_WINDOW_MS,
   PHOTO_MAX_DIMENSION,
   PHOTO_STORAGE_CAP_BYTES,
   PHOTO_UPLOADER_NAME_MAX,
@@ -316,6 +318,121 @@ export const recordedDriveIds = query({
       if (row) known.push(id);
     }
     return known;
+  },
+});
+
+/* -------------------------------------------------------- drive sessions */
+
+/**
+ * Reserve room in the in-flight budget for one original, or refuse.
+ *
+ * Summed over the recent window, unrecorded only, inside the transaction,
+ * so two openers racing past the budget cannot both get through. Rows well
+ * past the window are dropped a few at a time here, so the table stays
+ * the size of one busy hour.
+ */
+export const openSession = mutation({
+  args: { key: v.string(), uploaderId: v.string(), address: v.string(), size: v.number() },
+  returns: v.union(
+    v.object({ ok: v.literal(true), sessionId: v.id("driveSessions") }),
+    v.object({ ok: v.literal(false) })
+  ),
+  handler: async (ctx, { key, uploaderId, address, size }) => {
+    assertServer(key);
+    const now = Date.now();
+    const since = now - PHOTO_DRIVE_INFLIGHT_WINDOW_MS;
+
+    const open = await ctx.db
+      .query("driveSessions")
+      .withIndex("by_finalized_openedAt", (q) => q.eq("finalized", false).gte("openedAt", since))
+      .take(5000);
+    const inFlight = open.reduce((sum, s) => sum + s.size, 0);
+    if (inFlight + size > PHOTO_DRIVE_INFLIGHT_BUDGET_BYTES) return { ok: false as const };
+
+    // Tidy a few rows that are long past mattering.
+    const stale = await ctx.db
+      .query("driveSessions")
+      .withIndex("by_finalized_openedAt", (q) =>
+        q.eq("finalized", false).lt("openedAt", since - PHOTO_DRIVE_INFLIGHT_WINDOW_MS)
+      )
+      .take(20);
+    for (const row of stale) await ctx.db.delete(row._id);
+
+    const sessionId = await ctx.db.insert("driveSessions", {
+      uploaderId,
+      address,
+      size,
+      openedAt: now,
+      finalized: false,
+    });
+    return { ok: true as const, sessionId };
+  },
+});
+
+/** The photo behind this session was recorded; its bytes leave the budget. */
+export const finalizeSession = mutation({
+  args: { key: v.string(), sessionId: v.id("driveSessions") },
+  returns: v.null(),
+  handler: async (ctx, { key, sessionId }) => {
+    assertServer(key);
+    const row = await ctx.db.get(sessionId);
+    if (row && !row.finalized) await ctx.db.delete(sessionId);
+    return null;
+  },
+});
+
+/* ----------------------------------------------------------- sweeping */
+
+/**
+ * Claim the right to sweep stored copies, at most once per interval.
+ * Lives on the totals row so it works whichever storage the hosts chose.
+ */
+export const claimSweep = mutation({
+  args: { key: v.string(), intervalMs: v.number() },
+  returns: v.boolean(),
+  handler: async (ctx, { key, intervalMs }) => {
+    assertServer(key);
+    const now = Date.now();
+    const existing = await totalsRow(ctx);
+    if (existing) {
+      if (now - (existing.lastSweptAt ?? 0) < intervalMs) return false;
+      await ctx.db.patch(existing._id, { lastSweptAt: now });
+    } else {
+      await ctx.db.insert("photoTotals", { singleton: "photos", live: 0, hidden: 0, bytes: 0, lastSweptAt: now });
+    }
+    return true;
+  },
+});
+
+/**
+ * Delete stored copies that no photo points at and that are old enough
+ * not to be an upload still being recorded.
+ *
+ * The route discards a copy at once when its record fails; this is for
+ * the case where that discard could not happen either — an outage that
+ * took both — so nothing in storage stays unowned for good. Oldest first,
+ * a bounded page per run.
+ */
+export const sweepOrphanCopies = mutation({
+  args: { key: v.string(), olderThanMs: v.number(), max: v.number() },
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx, { key, olderThanMs, max }) => {
+    assertServer(key);
+    const cutoff = Date.now() - olderThanMs;
+    const files = await ctx.db.system.query("_storage").take(Math.min(max, 500));
+
+    let deleted = 0;
+    for (const file of files) {
+      if (file._creationTime > cutoff) continue;
+      const owner = await ctx.db
+        .query("photos")
+        .withIndex("by_webStorageId", (q) => q.eq("webStorageId", file._id))
+        .first();
+      if (owner) continue;
+      await ctx.storage.delete(file._id);
+      deleted += 1;
+    }
+    return { deleted };
   },
 });
 

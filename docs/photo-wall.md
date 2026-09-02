@@ -146,6 +146,21 @@ Eleven findings, all fixed on the branch:
   setting on the Event tab.
 - The README still said guest sessions survive a password change.
 
+Second round (six findings), all fixed on the branch:
+
+- A fresh device cookie was free, so the per-device limit meant nothing to
+  a script. Issuance is rationed per address, and originals in flight —
+  opened and not yet recorded — are bounded by a site-wide byte budget over
+  a rolling window, which is what tells a party apart from a script.
+- An outage that stopped the record could also stop the discard of its web
+  copy. Stored copies are swept on a cadence, oldest first.
+- A retry of one photo ran outside the three lanes. One queue and one set
+  of lanes serve the first submit and every retry.
+- The folder was only tidied after a successful upload or a host visit;
+  now also when a session opens and on wall loads, behind the same claim.
+- Drive lists a thousand files a page; the reconcile follows page tokens.
+- Cancelling every photo in a batch showed a success screen for nothing.
+
 ## Found while verifying
 
 - **Three uploads at once minted three device cookies.** The first request

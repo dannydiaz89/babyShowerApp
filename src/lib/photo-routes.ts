@@ -37,6 +37,14 @@ export const PHOTO_RATE = {
   creates: 120,
   hides: 60,
   perAddress: 10_000,
+  /**
+   * New device cookies per address. A cookie is what the device limits
+   * key on, and a fresh one otherwise costs a page load; capping how many
+   * an address may be issued is what makes "per device" mean something.
+   * A hundred and fifty guests need a hundred and fifty, plus a few who
+   * clear cookies or switch browsers.
+   */
+  mintsPerAddress: 400,
 } as const;
 
 /** Who is calling, as an address. Behind Vercel this is the real client. */
@@ -70,6 +78,11 @@ export async function withinLimit(id: string, limit: number): Promise<boolean> {
     console.error("Photo rate limit check failed", error);
     return true;
   }
+}
+
+/** Whether this address may be issued another device cookie. Fails open like the rest. */
+export async function mintAllowed(address: string): Promise<boolean> {
+  return withinLimit(`photos:mint:ip:${address}`, PHOTO_RATE.mintsPerAddress);
 }
 
 /** Both limits for one kind of request: the device's and its address's backstop. */

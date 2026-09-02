@@ -1,4 +1,6 @@
+import { ConvexHttpClient } from "convex/browser";
 import { NextResponse, type NextRequest } from "next/server";
+import { api } from "../convex/_generated/api";
 import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
 import {
@@ -17,6 +19,35 @@ const GUEST_PATHS = ["/invitation", "/rsvp", "/registry", "/photos"];
  * Both origins are named here so the policy can stay strict everywhere else.
  */
 const DRIVE_UPLOAD_ORIGIN = "https://www.googleapis.com";
+
+/**
+ * New device cookies per address per hour. Mirrors PHOTO_RATE.mintsPerAddress
+ * in lib/photo-routes.ts, which the routes apply to their own fallback mint;
+ * that module imports next/headers and cannot run here on the Edge.
+ */
+const MINTS_PER_ADDRESS = 400;
+
+/** Whether this address may be issued another device cookie. Fails open. */
+async function mintAllowed(request: NextRequest): Promise<boolean> {
+  const url = process.env.CONVEX_URL;
+  const key = process.env.ADMIN_API_KEY;
+  if (!url || !key) return true;
+  const address =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  try {
+    const result = await new ConvexHttpClient(url).mutation(api.rateLimit.consume, {
+      key,
+      id: `photos:mint:ip:${address}`,
+      limit: MINTS_PER_ADDRESS,
+      windowMs: 60 * 60 * 1000,
+    });
+    return result.allowed;
+  } catch {
+    return true;
+  }
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -55,7 +86,8 @@ export async function middleware(request: NextRequest) {
      */
     if (
       pathname.startsWith("/photos") &&
-      !(await readUploaderCookie(request.cookies.get(UPLOADER_COOKIE)?.value))
+      !(await readUploaderCookie(request.cookies.get(UPLOADER_COOKIE)?.value)) &&
+      (await mintAllowed(request))
     ) {
       response.cookies.set(UPLOADER_COOKIE, await mintUploaderCookie(), uploaderCookieOptions());
     }

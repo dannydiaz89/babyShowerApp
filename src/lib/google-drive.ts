@@ -169,6 +169,7 @@ export type DriveConnection = DriveHealth & {
   folderName: string;
   folderUrl: string;
   connectedAt: number;
+  lastReconciledAt: number | null;
 };
 
 type StoredConnection = DriveConnection & { refreshTokenSealed: string };
@@ -188,6 +189,7 @@ async function storedConnection(): Promise<StoredConnection | null> {
     failureMessage: row.failureMessage ?? null,
     failedAt: row.failedAt ?? null,
     lastCheckedAt: row.lastCheckedAt ?? null,
+    lastReconciledAt: row.lastReconciledAt ?? null,
   };
 }
 
@@ -473,15 +475,29 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number }> {
 
   try {
     const accessToken = await accessTokenFor(connection);
-    const params = new URLSearchParams({
-      q: `'${connection.folderId}' in parents and trashed = false`,
-      fields: "files(id,createdTime)",
-      pageSize: "1000",
-      orderBy: "createdTime",
-    });
-    const response = await driveFetch(accessToken, `${DRIVE_API}/files?${params}`);
-    if (!response.ok) throw new DriveError(`Google answered ${response.status} listing the folder.`);
-    const { files = [] } = (await response.json()) as { files?: FolderFile[] };
+    /*
+     * Google returns at most a thousand files per page and a token for the
+     * next. Oldest first, a bounded number of pages: what one run does not
+     * reach, the next run will, and the oldest files are the ones that
+     * matter.
+     */
+    const files: FolderFile[] = [];
+    let pageToken: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const params = new URLSearchParams({
+        q: `'${connection.folderId}' in parents and trashed = false`,
+        fields: "nextPageToken,files(id,createdTime)",
+        pageSize: "1000",
+        orderBy: "createdTime",
+        ...(pageToken ? { pageToken } : {}),
+      });
+      const response = await driveFetch(accessToken, `${DRIVE_API}/files?${params}`);
+      if (!response.ok) throw new DriveError(`Google answered ${response.status} listing the folder.`);
+      const body = (await response.json()) as { files?: FolderFile[]; nextPageToken?: string };
+      files.push(...(body.files ?? []));
+      pageToken = body.nextPageToken;
+      if (!pageToken) break;
+    }
     if (files.length === 0) return { deleted: 0 };
 
     const recorded = new Set(
@@ -507,9 +523,16 @@ export async function reconcileDriveFolder(): Promise<{ deleted: number }> {
   }
 }
 
-/** Arrange a reconcile after this response, if one is due. */
-export async function scheduleReconcile(): Promise<void> {
+/**
+ * Arrange a reconcile after this response, if one is due.
+ *
+ * Checked against the row first, so the many page loads that are not due
+ * cost no mutation; the claim itself is what makes the one that is due
+ * exclusive.
+ */
+export async function scheduleReconcile(connection: DriveConnection): Promise<void> {
   if (!googleConfigured()) return;
+  if (Date.now() - (connection.lastReconciledAt ?? 0) < RECONCILE_INTERVAL_MS) return;
   try {
     const claimed = await convexClient().mutation(api.drive.claimReconcile, {
       key: convexKey(),

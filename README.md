@@ -267,12 +267,16 @@ What's in place:
   server answers `mine: true` per photo — so nobody can hide another phone's
   photos, and nothing a guest does deletes anything. Hosts delete.
 - **Every photo route checks the session itself**, like the Server Actions.
-  Uploads are throttled per device (the cookie is signed, so it cannot be
-  made up to dodge this) and, as a backstop set far above what a whole
-  party produces on one Wi-Fi address, per address. What actually answers
-  someone misusing the guest password to push originals into the Drive
-  folder is that the folder is tidied: every ten minutes at most, any file
-  older than thirty minutes that no photo record points at is deleted.
+  Uploads are throttled per device — the device cookie is signed, and new
+  ones are rationed per address, so a fresh identity is not free — and, as
+  a backstop far above what a whole party produces on one Wi-Fi address,
+  per address. What actually stops someone with the guest password from
+  filling the Drive is a budget on originals *in flight*: bytes opened for
+  upload and not yet recorded, summed over the last thirty minutes across
+  the site. A party's uploads leave that count within seconds of landing;
+  a script's never do, and it stops at the budget. The folder and the
+  site's storage are both tidied on a ten-minute cadence: anything older
+  than thirty minutes that no photo record points at is deleted.
 - **The Drive refresh token is sealed** (AES-GCM under a key derived from
   `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
   reach your Drive. The site asks Google for the `drive.file` scope only.

@@ -173,6 +173,12 @@ beforeEach(() => {
         return { driveFileId: "drive-1" };
       case "photos:discard":
         return { deleted: true };
+      case "photos:openSession":
+        return { ok: true, sessionId: "sess-1" };
+      case "photos:finalizeSession":
+        return null;
+      case "photos:claimSweep":
+        return false;
       default:
         throw new Error("unexpected mutation");
     }
@@ -233,7 +239,10 @@ describe("POST /api/photos/session", () => {
     const response = await session.POST(json("/api/photos/session", SESSION_BODY));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ sessionUrl: "https://www.googleapis.com/upload/x" });
+    expect(await response.json()).toEqual({
+      sessionUrl: "https://www.googleapis.com/upload/x",
+      sessionId: "sess-1",
+    });
     expect(cookieJar.get(UPLOADER_COOKIE)).toMatch(/^[a-f0-9]{32}\.[a-f0-9]{64}$/);
     expect(openUploadSession).toHaveBeenCalledWith(
       expect.objectContaining({ name: "IMG_1.jpg", mimeType: "image/jpeg", origin: BASE })
@@ -273,6 +282,51 @@ describe("POST /api/photos/session", () => {
     expect(limitIds).toEqual(
       expect.arrayContaining([`photos:session:${DEVICE}`, "photos:session:ip:203.0.113.9"])
     );
+  });
+
+  it("rations new device cookies per address, so a fresh identity is not free", async () => {
+    await asGuest();
+    mutation.mockImplementation(async (fn: unknown, args: Record<string, unknown>) =>
+      getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "rateLimit:consume"
+        ? { allowed: !String(args.id).startsWith("photos:mint:ip:"), retryAfterMs: 0 }
+        : { ok: true }
+    );
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    expect(response.status).toBe(429);
+    expect(cookieJar.has(UPLOADER_COOKIE)).toBe(false);
+    expect(openUploadSession).not.toHaveBeenCalled();
+  });
+
+  it("reserves the original's bytes in the in-flight budget before opening, and refuses when it is spent", async () => {
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
+    await asGuest();
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
+
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(called("photos:openSession")[0][1]).toMatchObject({
+      uploaderId: DEVICE,
+      address: "203.0.113.9",
+      size: SESSION_BODY.size,
+    });
+
+    mutation.mockImplementation(async (fn: unknown) =>
+      getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "photos:openSession"
+        ? { ok: false }
+        : { allowed: true, retryAfterMs: 0 }
+    );
+    openUploadSession.mockClear();
+    const refused = await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(refused.status).toBe(429);
+    expect(openUploadSession).not.toHaveBeenCalled();
+  });
+
+  it("does not touch the budget when originals are not kept", async () => {
+    await asGuest();
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(called("photos:openSession")).toHaveLength(0);
   });
 
   it("keeps a whole party on one address inside the backstop", async () => {
@@ -476,14 +530,23 @@ describe("POST /api/photos", () => {
     expect(called("photos:create")).toHaveLength(0);
   });
 
-  it("keeps a verified Drive id on the row, and arranges a tidy of the folder", async () => {
+  it("keeps a verified Drive id on the row, frees its bytes from the budget, and arranges a tidy", async () => {
     await asGuest();
+    driveConnection = HEALTHY_DRIVE;
 
-    await photos.POST(finalizeForm({ driveFileId: "drive-9" }));
+    await photos.POST(finalizeForm({ driveFileId: "drive-9", sessionId: "sess-1" }));
 
     expect(verifyUploadedFile).toHaveBeenCalledWith("drive-9");
     expect(called("photos:create")[0][1]).toMatchObject({ driveFileId: "drive-9" });
+    expect(called("photos:finalizeSession")[0][1]).toMatchObject({ sessionId: "sess-1" });
     expect(scheduleReconcile).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a session id that could not be one", async () => {
+    await asGuest();
+    driveConnection = HEALTHY_DRIVE;
+    await photos.POST(finalizeForm({ driveFileId: "drive-9", sessionId: "../x" }));
+    expect(called("photos:finalizeSession")).toHaveLength(0);
   });
 
   it("does not touch the Drive folder for a photo that never went there", async () => {
