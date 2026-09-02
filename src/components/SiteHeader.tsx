@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { signOut } from "@/app/actions";
+import { registerSiteOrigin } from "@/lib/photos";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Badge, Button, ButtonLink, NavLink } from "@/components/ui";
 import type { Dictionary, Locale } from "@/lib/i18n";
@@ -130,7 +131,7 @@ export function GuestHeader({
   );
 }
 
-export function AdminHeader({
+export async function AdminHeader({
   current,
   babyName,
   locale,
@@ -141,6 +142,10 @@ export function AdminHeader({
   locale: Locale;
   t: Dictionary;
 }) {
+  // Every host page renders this, and a host's request is the one address
+  // known to reach the site — so this is where the site records where it is.
+  await registerSiteOrigin();
+
   return (
     <SiteHeader
       brand={babyName}

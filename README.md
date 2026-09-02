@@ -144,27 +144,24 @@ The `drive.file` scope reaches only files and folders the site itself created â€
 never the rest of your Drive. You can revoke it any time from your Google
 account's connected-apps page; the folder and the photos in it stay yours.
 
-**One more variable, on Convex.** A cron on the Convex deployment tidies photo
-storage every ten minutes by calling the site, so it needs to know where the
-site is:
+**The tidy cron finds the site on its own.** A cron on the Convex deployment
+tidies photo storage every ten minutes by calling the site. It learns the
+site's address from the site itself: whenever a host opens an admin page,
+the site records the origin that request came in on. So after deploying,
+sign in at `/admin` once and the cron has what it needs â€” on Vercel, behind
+a new domain, or in Docker alike. Until then it logs that it is skipping,
+and tidying still runs whenever someone uses the site.
 
-```bash
-pnpm exec convex env set SITE_URL https://your-site.example
-```
-
-Without it the cron logs that it is skipping and the tidy still runs, but
-only when someone is using the site.
-
-Do not set it to `localhost` for development: the cron runs in Convex's
-cloud and cannot reach your machine. Leave it unset locally. To exercise the
-endpoint by hand, which is all the cron does:
+Development origins (`localhost`, `127.0.0.1`, `*.local`) are never
+recorded, since a cron in Convex's cloud could not reach them. To exercise
+the endpoint by hand locally, which is all the cron does:
 
 ```bash
 curl -X POST http://localhost:3001/api/photos/tidy -H "Authorization: Bearer $ADMIN_API_KEY"
 ```
 
-A tunnel such as ngrok also works. In a Docker setup a self-hosted Convex
-container reaches the site by its service name, e.g. `http://web:3001`.
+To pin the address instead, set `SITE_URL` on the Convex deployment; it
+overrides what the site recorded.
 
 ### Running it
 

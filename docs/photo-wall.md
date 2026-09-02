@@ -174,8 +174,9 @@ Third round (five findings), all fixed on the branch:
   restarted at page one and stopped after ten. Both keep a cursor between
   runs and walk everything.
 - Tidying was request-driven. A Convex cron calls the site's tidy endpoint
-  every ten minutes with the shared server key; `SITE_URL` on Convex points
-  it at the site.
+  every ten minutes with the shared server key. The site records its own
+  origin whenever a host opens an admin page, so the cron finds it without
+  a setting; `SITE_URL` on Convex overrides that if ever needed.
 
 ## Found while verifying
 

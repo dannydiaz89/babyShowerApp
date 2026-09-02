@@ -1,5 +1,6 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { siteOriginFrom } from "@/lib/site-origin";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -198,6 +199,26 @@ export async function storeWebCopy(copy: Blob): Promise<Id<"_storage">> {
   const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
   return storageId;
 }
+
+/**
+ * Tell Convex where the site is, so the tidy cron can call it.
+ *
+ * Called from the host pages, after the response, at most once per request.
+ * The origin comes from the request a signed-in host just made, which is
+ * the one address known to work; the mutation is a no-op when it has not
+ * changed. Development origins are skipped — see lib/site-origin.ts.
+ */
+export const registerSiteOrigin = cache(async (): Promise<void> => {
+  const origin = siteOriginFrom(await headers());
+  if (!origin) return;
+  after(async () => {
+    try {
+      await convexClient().mutation(api.site.register, { key: convexKey(), url: origin });
+    } catch (error) {
+      console.error("Recording the site's address failed", error);
+    }
+  });
+});
 
 /** How often stored copies are swept for orphans, at most, and how old one must be. */
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;

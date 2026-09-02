@@ -196,6 +196,21 @@ export default defineSchema({
   }).index("by_singleton", ["singleton"]),
 
   /**
+   * Where the site is, as it last saw itself from a host's request.
+   *
+   * The tidy cron in convex/tidy.ts calls the site, and this is how it
+   * knows the address without anyone setting one: the site records its
+   * own origin whenever a host loads an admin page, so a deploy, a domain
+   * change or a Docker setup needs no extra step. SITE_URL on the
+   * deployment, if set, overrides it.
+   */
+  site: defineTable({
+    singleton: v.literal("site"),
+    url: v.string(),
+    seenAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
    * One Drive upload the site opened for a phone: how big, when, and
    * whether the photo was recorded afterwards. The sum of unrecorded sizes
    * over the recent window is the in-flight budget in convex/limits.ts.

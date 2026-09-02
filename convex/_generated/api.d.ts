@@ -16,6 +16,7 @@ import type * as photos from "../photos.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as rsvps from "../rsvps.js";
 import type * as settings from "../settings.js";
+import type * as site from "../site.js";
 import type * as tidy from "../tidy.js";
 
 import type {
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   rateLimit: typeof rateLimit;
   rsvps: typeof rsvps;
   settings: typeof settings;
+  site: typeof site;
   tidy: typeof tidy;
 }>;
 

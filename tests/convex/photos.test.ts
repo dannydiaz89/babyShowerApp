@@ -299,6 +299,23 @@ describe("sweeping stored copies", () => {
   });
 });
 
+describe("the site's address", () => {
+  it("is recorded, updated when it changes, and left alone when it has not", async () => {
+    const t = db();
+    await t.mutation(api.site.register, { key: KEY, url: "https://a.example" });
+    const first = await t.run(async (ctx) => ctx.db.query("site").unique());
+    await t.mutation(api.site.register, { key: KEY, url: "https://a.example" });
+    const same = await t.run(async (ctx) => ctx.db.query("site").unique());
+    await t.mutation(api.site.register, { key: KEY, url: "https://b.example" });
+    const changed = await t.run(async (ctx) => ctx.db.query("site").unique());
+
+    expect(first?.url).toBe("https://a.example");
+    expect(same?.seenAt).toBe(first?.seenAt);
+    expect(changed?.url).toBe("https://b.example");
+    expect(await t.run(async (ctx) => (await ctx.db.query("site").collect()).length)).toBe(1);
+  });
+});
+
 describe("drive health", () => {
   const base = {
     key: KEY,
