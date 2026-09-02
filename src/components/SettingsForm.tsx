@@ -831,6 +831,58 @@ export function SettingsForm({
             }}
           >
             <fieldset>
+              <FieldsetLabel>{t.settings.wallMode}</FieldsetLabel>
+              <div className="space-y-3">
+                {PHOTO_WALL_MODES.map((mode) => (
+                  <label key={mode} className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      name="photoWall"
+                      value={mode}
+                      defaultChecked={settings.photoWall === mode}
+                      className="mt-1 h-4 w-4 accent-accent"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-ink">
+                        {wallModeLabels[mode][0]}
+                      </span>
+                      <span className="block text-xs text-ink-muted">{wallModeLabels[mode][1]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="-mt-2">
+              <DateTimeField
+                key={closesKey}
+                id="settings-photo-closes"
+                name="photoWallClosesISO"
+                legend={t.settings.wallCloses}
+                value={closesKey === 0 ? settings.photoWallClosesISO || drive.defaultCloses : drive.defaultCloses}
+                locale={intlLocale}
+                dateLabels={dateLabels}
+                timeLabels={timeLabels}
+                dateFieldLabel={t.settings.dateInput}
+                timeFieldLabel={t.settings.timeInput}
+              />
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <Hint className="mt-0">{t.settings.wallClosesHint}</Hint>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  onClick={() => {
+                    setClosesKey((k) => k + 1);
+                    setDirty(true);
+                  }}
+                  className="shrink-0 px-0"
+                >
+                  {t.settings.wallClosesReset}
+                </Button>
+              </div>
+            </div>
+            <fieldset className="border-t border-border pt-5">
               <FieldsetLabel>{t.settings.storageTitle}</FieldsetLabel>
               <div className="space-y-4">
                 {PHOTO_STORAGE_OPTIONS.map((option) => (
@@ -929,58 +981,6 @@ export function SettingsForm({
               <Hint className="mt-4">{t.settings.storageSwitchNote}</Hint>
             </fieldset>
 
-            <fieldset className="border-t border-border pt-5">
-              <FieldsetLabel>{t.settings.wallMode}</FieldsetLabel>
-              <div className="space-y-3">
-                {PHOTO_WALL_MODES.map((mode) => (
-                  <label key={mode} className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="photoWall"
-                      value={mode}
-                      defaultChecked={settings.photoWall === mode}
-                      className="mt-1 h-4 w-4 accent-accent"
-                    />
-                    <span>
-                      <span className="block text-sm font-medium text-ink">
-                        {wallModeLabels[mode][0]}
-                      </span>
-                      <span className="block text-xs text-ink-muted">{wallModeLabels[mode][1]}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <div className="border-t border-border pt-5">
-              <DateTimeField
-                key={closesKey}
-                id="settings-photo-closes"
-                name="photoWallClosesISO"
-                legend={t.settings.wallCloses}
-                value={closesKey === 0 ? settings.photoWallClosesISO || drive.defaultCloses : drive.defaultCloses}
-                locale={intlLocale}
-                dateLabels={dateLabels}
-                timeLabels={timeLabels}
-                dateFieldLabel={t.settings.dateInput}
-                timeFieldLabel={t.settings.timeInput}
-              />
-              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <Hint className="mt-0">{t.settings.wallClosesHint}</Hint>
-                <Button
-                  type="button"
-                  variant="quiet"
-                  size="sm"
-                  onClick={() => {
-                    setClosesKey((k) => k + 1);
-                    setDirty(true);
-                  }}
-                  className="shrink-0 px-0"
-                >
-                  {t.settings.wallClosesReset}
-                </Button>
-              </div>
-            </div>
           </Panel>
 
           {/* The forms the Drive buttons inside the panel post to. */}
