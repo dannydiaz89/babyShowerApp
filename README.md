@@ -155,6 +155,17 @@ pnpm exec convex env set SITE_URL https://your-site.example
 Without it the cron logs that it is skipping and the tidy still runs, but
 only when someone is using the site.
 
+Do not set it to `localhost` for development: the cron runs in Convex's
+cloud and cannot reach your machine. Leave it unset locally. To exercise the
+endpoint by hand, which is all the cron does:
+
+```bash
+curl -X POST http://localhost:3001/api/photos/tidy -H "Authorization: Bearer $ADMIN_API_KEY"
+```
+
+A tunnel such as ngrok also works. In a Docker setup a self-hosted Convex
+container reaches the site by its service name, e.g. `http://web:3001`.
+
 ### Running it
 
 The dev server is pinned to **http://localhost:3001** (`next dev --port 3001`).
