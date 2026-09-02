@@ -3,6 +3,11 @@ import { cache } from "react";
 import { after } from "next/server";
 import { api } from "../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
+import {
+  orphansToDelete,
+  RECONCILE_INTERVAL_MS,
+  type FolderFile,
+} from "@/lib/drive-reconcile";
 import { open, seal } from "@/lib/seal";
 
 /**
@@ -445,6 +450,75 @@ export async function verifyUploadedFile(
   const json = (await response.json()) as { id?: string; size?: string; parents?: string[] };
   if (json.id !== fileId || !json.parents?.includes(connection.folderId)) return { ok: false };
   return { ok: true, size: json.size ? Number(json.size) : null };
+}
+
+/* ------------------------------------------------------------- reconcile */
+
+/**
+ * Delete what is in the folder and recorded nowhere.
+ *
+ * The phone puts originals in Drive before the site hears of them, so the
+ * folder can hold files no photo points at: an abandoned batch, a finalize
+ * that failed, or someone uploading originals on purpose and never
+ * finishing. Older than the grace period and unrecorded, they go. This is
+ * what bounds a misuse of the guest password: whatever is pushed into the
+ * folder without a photo on the wall lasts half an hour.
+ *
+ * Runs after a response, behind `claimReconcile`, so it costs a page load
+ * nothing and happens at most once per interval however busy the site is.
+ */
+export async function reconcileDriveFolder(): Promise<{ deleted: number }> {
+  const connection = await storedConnection();
+  if (!connection || !googleConfigured()) return { deleted: 0 };
+
+  try {
+    const accessToken = await accessTokenFor(connection);
+    const params = new URLSearchParams({
+      q: `'${connection.folderId}' in parents and trashed = false`,
+      fields: "files(id,createdTime)",
+      pageSize: "1000",
+      orderBy: "createdTime",
+    });
+    const response = await driveFetch(accessToken, `${DRIVE_API}/files?${params}`);
+    if (!response.ok) throw new DriveError(`Google answered ${response.status} listing the folder.`);
+    const { files = [] } = (await response.json()) as { files?: FolderFile[] };
+    if (files.length === 0) return { deleted: 0 };
+
+    const recorded = new Set(
+      await convexClient().query(api.photos.recordedDriveIds, {
+        key: convexKey(),
+        ids: files.map((f) => f.id),
+      })
+    );
+
+    let deleted = 0;
+    for (const id of orphansToDelete(files, recorded, Date.now())) {
+      const gone = await driveFetch(accessToken, `${DRIVE_API}/files/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (gone.ok || gone.status === 404) deleted += 1;
+    }
+    if (deleted > 0) console.log(`Reconciled the Drive folder: ${deleted} unrecorded file(s) removed.`);
+    return { deleted };
+  } catch (error) {
+    console.error("Reconciling the Drive folder failed", error);
+    await recordDriveFailure(error);
+    return { deleted: 0 };
+  }
+}
+
+/** Arrange a reconcile after this response, if one is due. */
+export async function scheduleReconcile(): Promise<void> {
+  if (!googleConfigured()) return;
+  try {
+    const claimed = await convexClient().mutation(api.drive.claimReconcile, {
+      key: convexKey(),
+      intervalMs: RECONCILE_INTERVAL_MS,
+    });
+    if (claimed) after(() => reconcileDriveFolder());
+  } catch (error) {
+    console.error("Scheduling a Drive reconcile failed", error);
+  }
 }
 
 /** Delete an original. True if it is gone, including when it already was. */

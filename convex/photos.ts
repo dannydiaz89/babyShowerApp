@@ -295,6 +295,30 @@ export const discard = mutation({
   },
 });
 
+/**
+ * Which of these Drive file ids belong to a recorded photo.
+ *
+ * For reconciling the folder: the caller lists what is in Drive and asks
+ * here what is accounted for; the rest is nobody's. One index read per id,
+ * bounded by the caller's page size.
+ */
+export const recordedDriveIds = query({
+  args: { key: v.string(), ids: v.array(v.string()) },
+  returns: v.array(v.string()),
+  handler: async (ctx, { key, ids }) => {
+    assertServer(key);
+    const known: string[] = [];
+    for (const id of ids.slice(0, 1000)) {
+      const row = await ctx.db
+        .query("photos")
+        .withIndex("by_driveFileId", (q) => q.eq("driveFileId", id))
+        .first();
+      if (row) known.push(id);
+    }
+    return known;
+  },
+});
+
 export const totals = query({
   args: { key: v.string() },
   returns: totalsValidator,

@@ -41,6 +41,7 @@ const openUploadSession = vi.fn();
 const verifyUploadedFile = vi.fn();
 const deleteFile = vi.fn();
 const recordDriveFailure = vi.fn();
+const scheduleReconcile = vi.fn();
 let driveConnection: Record<string, unknown> | null = null;
 vi.mock("@/lib/google-drive", () => ({
   DriveError: class DriveError extends Error {
@@ -55,6 +56,7 @@ vi.mock("@/lib/google-drive", () => ({
   verifyUploadedFile: (...args: unknown[]) => verifyUploadedFile(...args),
   deleteFile: (...args: unknown[]) => deleteFile(...args),
   recordDriveFailure: (...args: unknown[]) => recordDriveFailure(...args),
+  scheduleReconcile: (...args: unknown[]) => scheduleReconcile(...args),
 }));
 
 // The web copy upload posts to a Convex URL; nothing here should reach the network.
@@ -153,6 +155,7 @@ beforeEach(() => {
   verifyUploadedFile.mockReset();
   deleteFile.mockReset();
   recordDriveFailure.mockReset();
+  scheduleReconcile.mockReset();
   fetchMock.mockClear();
 
   mutation.mockImplementation(async (fn: unknown) => {
@@ -170,8 +173,6 @@ beforeEach(() => {
         return { driveFileId: "drive-1" };
       case "photos:discard":
         return { deleted: true };
-      case "rateLimit:release":
-        return null;
       default:
         throw new Error("unexpected mutation");
     }
@@ -274,34 +275,11 @@ describe("POST /api/photos/session", () => {
     );
   });
 
-  it("counts a Drive session as outstanding for its address, and not when there is no Drive session", async () => {
-    await asGuest();
-    await session.POST(json("/api/photos/session", SESSION_BODY));
-    let ids = called("rateLimit:consume").map(([, args]) => String(args.id));
-    expect(ids).not.toContain("photos:outstanding:ip:203.0.113.9");
-
-    mutation.mockClear();
-    settings = open("open", "drive");
-    driveConnection = HEALTHY_DRIVE;
-    await session.POST(json("/api/photos/session", SESSION_BODY));
-    ids = called("rateLimit:consume").map(([, args]) => String(args.id));
-    expect(ids).toContain("photos:outstanding:ip:203.0.113.9");
-  });
-
-  it("refuses a new Drive session once too many from the address are left open", async () => {
-    settings = open("open", "drive");
-    driveConnection = HEALTHY_DRIVE;
-    await asGuest();
-    mutation.mockImplementation(async (fn: unknown, args: Record<string, unknown>) =>
-      getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "rateLimit:consume"
-        ? { allowed: !String(args.id).includes("outstanding"), retryAfterMs: 0 }
-        : { ok: true }
-    );
-
-    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
-
-    expect(response.status).toBe(429);
-    expect(openUploadSession).not.toHaveBeenCalled();
+  it("keeps a whole party on one address inside the backstop", async () => {
+    // What a limit keyed on the address is compared against, when a hundred
+    // and fifty guests each upload ten photos in the same hour.
+    const { PHOTO_RATE } = await import("../../src/lib/photo-routes");
+    expect(PHOTO_RATE.perAddress).toBeGreaterThanOrEqual(150 * 10 * 2);
   });
 
   it("stops when the address is over its limit even if the device is not", async () => {
@@ -498,20 +476,20 @@ describe("POST /api/photos", () => {
     expect(called("photos:create")).toHaveLength(0);
   });
 
-  it("keeps a verified Drive id on the row, and closes the address's outstanding session", async () => {
+  it("keeps a verified Drive id on the row, and arranges a tidy of the folder", async () => {
     await asGuest();
 
     await photos.POST(finalizeForm({ driveFileId: "drive-9" }));
 
     expect(verifyUploadedFile).toHaveBeenCalledWith("drive-9");
     expect(called("photos:create")[0][1]).toMatchObject({ driveFileId: "drive-9" });
-    expect(called("rateLimit:release")[0][1]).toMatchObject({ id: "photos:outstanding:ip:203.0.113.9" });
+    expect(scheduleReconcile).toHaveBeenCalledTimes(1);
   });
 
-  it("gives nothing back for a photo that had no Drive session", async () => {
+  it("does not touch the Drive folder for a photo that never went there", async () => {
     await asGuest();
     await photos.POST(finalizeForm());
-    expect(called("rateLimit:release")).toHaveLength(0);
+    expect(scheduleReconcile).not.toHaveBeenCalled();
   });
 
   it("refuses a request with no web copy", async () => {

@@ -270,9 +270,9 @@ What's in place:
   Uploads are throttled per device (the cookie is signed, so it cannot be
   made up to dodge this) and, as a backstop set far above what a whole
   party produces on one Wi-Fi address, per address. What actually answers
-  a script is a count of Drive sessions *opened and never finished* per
-  address: honest guests finish what they open, so that count stays near
-  zero however many share the venue's network.
+  someone misusing the guest password to push originals into the Drive
+  folder is that the folder is tidied: every ten minutes at most, any file
+  older than thirty minutes that no photo record points at is deleted.
 - **The Drive refresh token is sealed** (AES-GCM under a key derived from
   `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
   reach your Drive. The site asks Google for the `drive.file` scope only.
@@ -302,8 +302,8 @@ Known limits, stated plainly:
   holding such a URL can load that image without the guest password; the
   wall itself is gated, and nothing links the URLs from outside it.
 - An upload abandoned between the original reaching Drive and the record
-  being written leaves a file in the Drive folder with no photo on the wall.
-  It is visible in the folder and harmless; the hosts can tidy it by hand.
+  being written leaves a file in the Drive folder with no photo on the wall
+  for up to about forty minutes, until the folder is next tidied.
 - The photo wall has been tested lightly, not at event load. Convex's free
   tier includes 1 GB of file bandwidth a month; a busy day of scrolling could
   approach it. The direct phone-to-Drive upload should be tried on a real

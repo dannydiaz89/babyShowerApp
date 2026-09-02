@@ -6,7 +6,7 @@ import {
   PHOTO_WEB_MAX_BYTES,
 } from "../../../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
-import { recordDriveFailure, verifyUploadedFile } from "@/lib/google-drive";
+import { recordDriveFailure, scheduleReconcile, verifyUploadedFile } from "@/lib/google-drive";
 import {
   discardWebCopy,
   ensureUploaderId,
@@ -16,7 +16,7 @@ import {
   wallState,
   type WallFilter,
 } from "@/lib/photos";
-import { closeOutstanding, refuse, withinLimits } from "@/lib/photo-routes";
+import { refuse, withinLimits } from "@/lib/photo-routes";
 import { getSettings } from "@/lib/settings";
 
 /*
@@ -152,8 +152,8 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return refuse(result.reason === "storage-full" ? "storage-full" : "bad-request", result.reason === "storage-full" ? 503 : 400);
     }
-    // The Drive session this original came through is finished.
-    if (driveFileId) await closeOutstanding();
+    // Uploads are when the folder gains files; a good moment to tidy it.
+    if (driveFileId) await scheduleReconcile();
     return NextResponse.json({ photo: result.photo }, { status: 201 });
   } catch (error) {
     /*

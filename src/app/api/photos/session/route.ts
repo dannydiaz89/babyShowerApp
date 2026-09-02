@@ -3,7 +3,7 @@ import { PHOTO_ORIGINAL_MAX_BYTES } from "../../../../../convex/limits";
 import { openUploadSession, recordDriveFailure } from "@/lib/google-drive";
 import { ensureUploaderId, photoCaller, wallState } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
-import { openOutstanding, refuse, withinLimits } from "@/lib/photo-routes";
+import { refuse, withinLimits } from "@/lib/photo-routes";
 
 /*
  * POST /api/photos/session
@@ -53,10 +53,6 @@ export async function POST(request: Request) {
 
   const { photoStorage } = await getSettings();
   if (photoStorage !== "drive") return NextResponse.json({ sessionUrl: null });
-
-  // Counted here and given back when the upload is recorded, so what the
-  // limit measures is sessions left open — see PHOTO_RATE.
-  if (!(await openOutstanding())) return refuse("rate-limited", 429);
 
   try {
     const session = await openUploadSession({

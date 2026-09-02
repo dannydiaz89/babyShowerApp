@@ -174,7 +174,9 @@ export default defineSchema({
     // built-in creation-time index instead.
     .index("by_status", ["status"])
     // So a stored copy can be checked for a row before being discarded.
-    .index("by_webStorageId", ["webStorageId"]),
+    .index("by_webStorageId", ["webStorageId"])
+    // So the Drive folder can be reconciled against what is recorded.
+    .index("by_driveFileId", ["driveFileId"]),
 
   /**
    * How many photos are live and hidden. Convex has no count operator, and
@@ -217,6 +219,8 @@ export default defineSchema({
     failureMessage: v.optional(v.string()),
     failedAt: v.optional(v.number()),
     lastCheckedAt: v.optional(v.number()),
+    /** When the folder was last reconciled against the photo rows. */
+    lastReconciledAt: v.optional(v.number()),
   }).index("by_singleton", ["singleton"]),
 
   /**

@@ -116,6 +116,24 @@ export const claimProbe = mutation({
   },
 });
 
+/**
+ * Claim the right to reconcile the folder, at most once per interval.
+ * Same shape as `claimProbe`: many callers may notice, one gets to go.
+ */
+export const claimReconcile = mutation({
+  args: { key: v.string(), intervalMs: v.number() },
+  returns: v.boolean(),
+  handler: async (ctx, { key, intervalMs }) => {
+    assertServer(key);
+    const existing = await connectionRow(ctx);
+    if (!existing) return false;
+    const now = Date.now();
+    if (now - (existing.lastReconciledAt ?? 0) < intervalMs) return false;
+    await ctx.db.patch(existing._id, { lastReconciledAt: now });
+    return true;
+  },
+});
+
 export const clear = mutation({
   args: { key: v.string() },
   returns: v.null(),

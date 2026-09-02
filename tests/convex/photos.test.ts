@@ -216,6 +216,24 @@ describe("drive health", () => {
     expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 0 })).toBe(false);
   });
 
+  it("hands the folder reconcile to one caller per interval", async () => {
+    const t = db();
+    expect(await t.mutation(api.drive.claimReconcile, { key: KEY, intervalMs: 0 })).toBe(false);
+    await t.mutation(api.drive.set, base);
+    expect(await t.mutation(api.drive.claimReconcile, { key: KEY, intervalMs: 0 })).toBe(true);
+    expect(await t.mutation(api.drive.claimReconcile, { key: KEY, intervalMs: 60_000 })).toBe(false);
+  });
+
+  it("says which Drive ids belong to a recorded photo", async () => {
+    const t = db();
+    await addPhoto(t, "dev-a", { driveFileId: "drive-known" });
+    const known = await t.query(api.photos.recordedDriveIds, {
+      key: KEY,
+      ids: ["drive-known", "drive-orphan"],
+    });
+    expect(known).toEqual(["drive-known"]);
+  });
+
   it("clears the failure on a healthy answer, and on a reconnect", async () => {
     const t = db();
     await t.mutation(api.drive.set, base);

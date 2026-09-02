@@ -2,7 +2,7 @@ import { AdminHeader } from "@/components/SiteHeader";
 import { PhotoWall } from "@/components/PhotoWall";
 import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import { Alert, ButtonLink, PageTitle } from "@/components/ui";
-import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
+import { getDriveConnection, googleConfigured, scheduleReconcile } from "@/lib/google-drive";
 import { fill, getTranslation } from "@/lib/i18n";
 import { loadTotals, loadWallPage, storageStatus, wallState, type WallFilter } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
@@ -52,6 +52,7 @@ export default async function AdminPhotosPage({
       ? getDriveConnection().catch(() => null)
       : Promise.resolve(null),
   ]);
+  if (connection) await scheduleReconcile();
 
   const counts: Record<WallFilter, number> = {
     all: totals.live + totals.hidden,
