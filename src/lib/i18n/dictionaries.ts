@@ -359,6 +359,7 @@ export const en = {
     bannerCta: "Upload photos",
 
     uploadTitle: "Add photos",
+    backToWall: "Back to the photo wall",
     chooseTitle: "Choose photos",
     chooseBody: "From your camera roll, or take one now. Up to {max} at a time.",
     chooseBodyDesktop: "Drop photos here, or choose them from your computer. Up to {max} at a time.",
@@ -816,6 +817,7 @@ export const es: Dictionary = {
     bannerCta: "Subir fotos",
 
     uploadTitle: "Subir fotos",
+    backToWall: "Volver al muro de fotos",
     chooseTitle: "Elijan sus fotos",
     chooseBody: "De su galería, o tomen una ahora. Hasta {max} a la vez.",
     chooseBodyDesktop: "Arrastren fotos aquí o elíjanlas desde su computadora. Hasta {max} a la vez.",

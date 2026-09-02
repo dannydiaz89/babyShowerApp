@@ -47,6 +47,18 @@ export default async function AddPhotosPage() {
       />
 
       <main id="main" className="mx-auto max-w-2xl px-5 pb-10 pt-8 sm:pt-10">
+        {/*
+          * A plain anchor, not next/link, on purpose: a client-side navigation
+          * never fires beforeunload, so a guest leaving mid-batch would lose
+          * the uploads in flight without the warning the page sets up.
+          */}
+        <a
+          href="/photos"
+          className="mb-3 inline-block py-1 text-sm text-ink-muted transition-colors hover:text-ink"
+        >
+          <span aria-hidden="true">&larr; </span>
+          {t.photos.backToWall}
+        </a>
         <PageTitle className="mb-6">{t.photos.uploadTitle}</PageTitle>
         <PhotoUploader
           max={PHOTO_BATCH_MAX}
