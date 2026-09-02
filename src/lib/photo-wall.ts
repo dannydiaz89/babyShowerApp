@@ -8,15 +8,13 @@
 import type { PhotoWallMode } from "@/lib/defaults";
 
 /**
- * Where the shower is. "The event date" means the calendar date there, not
- * on the server: Vercel runs in UTC, and a wall that opened at 5 pm the day
- * before — UTC midnight — would confuse everyone. The closing time is read
- * the same way.
- *
- * A single constant rather than a setting, because this site is for one
- * event. Forking it for another time zone means changing this line.
+ * The zone used when the settings do not name one. "The event date" means
+ * the calendar date where the shower is, not on the server: Vercel runs in
+ * UTC, and a wall that opened at 5 pm the day before — UTC midnight — would
+ * confuse everyone. The hosts set the real zone on the Event tab; this is
+ * only the fallback, and matches the sample event in lib/defaults.ts.
  */
-export const EVENT_TIME_ZONE = "America/Los_Angeles";
+export const DEFAULT_TIME_ZONE = "America/Chicago";
 
 export type WallSettings = {
   mode: PhotoWallMode;
@@ -157,7 +155,7 @@ export function localDateTimeISO(now: Date, timeZone: string): string {
 export function photoWallState(
   settings: WallSettings,
   now: Date,
-  timeZone: string = EVENT_TIME_ZONE
+  timeZone: string = DEFAULT_TIME_ZONE
 ): WallState {
   const { mode, startISO } = settings;
   /*

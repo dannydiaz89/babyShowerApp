@@ -8,6 +8,7 @@ import {
 import { convexClient, convexKey } from "@/lib/convex";
 import { recordDriveFailure, verifyUploadedFile } from "@/lib/google-drive";
 import {
+  discardWebCopy,
   ensureUploaderId,
   loadWallPage,
   photoCaller,
@@ -15,7 +16,8 @@ import {
   wallState,
   type WallFilter,
 } from "@/lib/photos";
-import { PHOTO_RATE, refuse, withinLimit } from "@/lib/photo-routes";
+import { refuse, withinLimits } from "@/lib/photo-routes";
+import { getSettings } from "@/lib/settings";
 
 /*
  * The photo wall's two main endpoints.
@@ -80,9 +82,7 @@ export async function POST(request: Request) {
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
-  if (!(await withinLimit(`photos:create:${uploaderId}`, PHOTO_RATE.creates))) {
-    return refuse("rate-limited", 429);
-  }
+  if (!(await withinLimits("create", uploaderId))) return refuse("rate-limited", 429);
 
   let form: FormData;
   try {
@@ -106,6 +106,14 @@ export async function POST(request: Request) {
   const originalBytes = integer(form.get("originalBytes"), Number.MAX_SAFE_INTEGER) ?? undefined;
 
   const claimedDriveId = String(form.get("driveFileId") ?? "").trim();
+  /*
+   * With Drive as the storage, a photo without an original is not what the
+   * hosts were promised — whether a bare client skipped the step or the
+   * choice changed under a batch in flight. Refused rather than recorded.
+   */
+  if ((await getSettings()).photoStorage === "drive" && !claimedDriveId) {
+    return refuse("bad-request", 400);
+  }
   let driveFileId: string | undefined;
   if (claimedDriveId) {
     if (claimedDriveId.length > 200) return refuse("bad-request", 400);
@@ -120,8 +128,15 @@ export async function POST(request: Request) {
     }
   }
 
+  let webStorageId: Awaited<ReturnType<typeof storeWebCopy>>;
   try {
-    const webStorageId = await storeWebCopy(web);
+    webStorageId = await storeWebCopy(web);
+  } catch (error) {
+    console.error("Storing a web copy failed", error);
+    return refuse("failed", 500);
+  }
+
+  try {
     const result = await convexClient().mutation(api.photos.create, {
       key: convexKey(),
       uploaderId,
@@ -139,7 +154,14 @@ export async function POST(request: Request) {
     }
     return NextResponse.json({ photo: result.photo }, { status: 201 });
   } catch (error) {
+    /*
+     * The copy is stored but nothing points at it: no row, no place in the
+     * meter, nothing a host could delete. Take it back out. A refusal above
+     * already did so inside the mutation; this is for the mutation itself
+     * not completing.
+     */
     console.error("Recording a photo failed", error);
+    await discardWebCopy(webStorageId);
     return refuse("failed", 500);
   }
 }

@@ -14,6 +14,11 @@ import type { PhotoView, PhotosText } from "@/lib/photo-client";
  * through everything without closing.
  *
  * The one dark surface in the app: a photograph reads best against it.
+ *
+ * A native <dialog> opened with showModal(), so focus stays inside it and
+ * the page behind is inert for as long as it is open, with no trapping
+ * code of our own. Hidden controls are hidden with visibility, not only
+ * opacity, so the keyboard cannot land on something the eye cannot see.
  */
 /** One thing the reader may do to the photo on screen. */
 export type ViewerAction = {
@@ -47,6 +52,7 @@ export function PhotoViewer({
 }) {
   const photo = photos[index];
   const [controls, setControls] = useState(true);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const touch = useRef<{ x: number; y: number; at: number } | null>(null);
 
@@ -63,26 +69,28 @@ export function PhotoViewer({
     if (photos.length - index <= 4) onNearEnd();
   }, [index, photos.length, onNearEnd]);
 
-  // Keyboard, focus and scroll lock, for as long as the viewer is open.
+  // Open as a modal for as long as this is mounted. The dialog handles
+  // Escape (as a cancel event), focus containment and the inert page.
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
     const previous = document.activeElement;
+    dialog.showModal();
     closeRef.current?.focus();
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
+    return () => {
+      if (dialog.open) dialog.close();
+      if (previous instanceof HTMLElement) previous.focus();
+    };
+  }, []);
 
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      else if (event.key === "ArrowLeft") go(-1);
+      if (event.key === "ArrowLeft") go(-1);
       else if (event.key === "ArrowRight") go(1);
     };
     window.addEventListener("keydown", onKey);
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = overflow;
-      if (previous instanceof HTMLElement) previous.focus();
-    };
-  }, [go, onClose]);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go]);
 
   if (!photo) return null;
 
@@ -113,18 +121,22 @@ export function PhotoViewer({
   const arrow =
     "absolute top-1/2 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-md " +
     "bg-on-viewer/15 text-on-viewer transition-opacity hover:bg-on-viewer/25 disabled:opacity-30";
+  // `invisible` takes hidden controls out of the tab order; opacity alone would not.
+  const hiddenControls = controls ? "" : "invisible opacity-0";
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
       aria-label={t.viewerLabel}
-      className="fixed inset-0 z-50 flex flex-col bg-viewer text-on-viewer"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClose={onClose}
+      className="fixed inset-0 z-50 m-0 flex h-dvh max-h-none w-screen max-w-none flex-col border-0 bg-viewer p-0 text-on-viewer open:flex"
     >
       <div
-        className={`flex shrink-0 items-center justify-between px-4 pb-2 pt-[max(env(safe-area-inset-top),0.75rem)] text-sm text-on-viewer-muted transition-opacity ${
-          controls ? "" : "pointer-events-none opacity-0"
-        }`}
+        className={`flex shrink-0 items-center justify-between px-4 pb-2 pt-[max(env(safe-area-inset-top),0.75rem)] text-sm text-on-viewer-muted transition-opacity ${hiddenControls}`}
       >
         <span aria-live="polite">{positionLabel}</span>
         <button
@@ -163,7 +175,7 @@ export function PhotoViewer({
             event.stopPropagation();
             go(-1);
           }}
-          className={`${arrow} left-3 ${controls ? "" : "pointer-events-none opacity-0"}`}
+          className={`${arrow} left-3 ${hiddenControls}`}
         >
           <ChevronLeftIcon />
         </button>
@@ -175,16 +187,14 @@ export function PhotoViewer({
             event.stopPropagation();
             go(1);
           }}
-          className={`${arrow} right-3 ${controls ? "" : "pointer-events-none opacity-0"}`}
+          className={`${arrow} right-3 ${hiddenControls}`}
         >
           <ChevronRightIcon />
         </button>
       </div>
 
       <div
-        className={`shrink-0 px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3 transition-opacity ${
-          controls ? "" : "pointer-events-none opacity-0"
-        }`}
+        className={`shrink-0 px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3 transition-opacity ${hiddenControls}`}
       >
         {photo.uploaderName ? (
           <p className="text-[0.95rem] font-medium">{photo.uploaderName}</p>
@@ -216,6 +226,6 @@ export function PhotoViewer({
         </div>
         <p className="mt-3 text-center text-[0.7rem] text-on-viewer-muted">{t.tapToToggle}</p>
       </div>
-    </div>
+    </dialog>
   );
 }

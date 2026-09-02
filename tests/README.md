@@ -14,6 +14,7 @@ covers and where a new one belongs:
 | `src/lib/photo-wall.ts` | `tests/lib/photo-wall.test.ts` |
 | `src/lib/justified.ts` | `tests/lib/justified.test.ts` |
 | `src/lib/seal.ts` | `tests/lib/seal.test.ts` |
+| `src/lib/photo-device.ts` | `tests/lib/photo-device.test.ts` |
 
 ```bash
 pnpm test        # once

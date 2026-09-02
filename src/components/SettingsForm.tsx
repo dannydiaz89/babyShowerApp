@@ -37,6 +37,7 @@ import {
   PHOTO_STORAGE_OPTIONS,
   PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
+  TIME_ZONE_OPTIONS,
   type Localized,
   type Registry,
   type Settings,
@@ -395,7 +396,10 @@ export function SettingsForm({
   };
 
   const wallModeLabels = {
-    auto: [t.settings.wallModeAuto, fill(t.settings.wallModeAutoHint, { date: drive.eventDate })],
+    auto: [
+      t.settings.wallModeAuto,
+      fill(t.settings.wallModeAutoHint, { date: drive.eventDate, zone: settings.timeZone.replace(/_/g, " ") }),
+    ],
     open: [t.settings.wallModeOpen, t.settings.wallModeOpenHint],
   } as const;
 
@@ -595,6 +599,21 @@ export function SettingsForm({
               dateFieldLabel={t.settings.dateInput}
               timeFieldLabel={t.settings.timeInput}
             />
+          </div>
+
+          <div>
+            <Label htmlFor="settings-timezone">{t.settings.timeZone}</Label>
+            <Select id="settings-timezone" name="timeZone" defaultValue={settings.timeZone} aria-describedby="settings-timezone-hint">
+              {(TIME_ZONE_OPTIONS as readonly string[]).includes(settings.timeZone)
+                ? null
+                : <option value={settings.timeZone}>{settings.timeZone}</option>}
+              {TIME_ZONE_OPTIONS.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone.replace(/_/g, " ")}
+                </option>
+              ))}
+            </Select>
+            <Hint id="settings-timezone-hint">{t.settings.timeZoneHint}</Hint>
           </div>
 
           <div className="sm:max-w-xs">

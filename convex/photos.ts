@@ -273,6 +273,28 @@ export const wall = query({
   },
 });
 
+/**
+ * Remove a stored web copy that no photo row points at.
+ *
+ * For the route's failure path: the copy went into storage and then the
+ * record did not happen. Checked against the rows first, so a retry that
+ * races a success can never delete a copy a photo is using.
+ */
+export const discard = mutation({
+  args: { key: v.string(), storageId: v.id("_storage") },
+  returns: v.object({ deleted: v.boolean() }),
+  handler: async (ctx, { key, storageId }) => {
+    assertServer(key);
+    const inUse = await ctx.db
+      .query("photos")
+      .withIndex("by_webStorageId", (q) => q.eq("webStorageId", storageId))
+      .first();
+    if (inUse) return { deleted: false };
+    await ctx.storage.delete(storageId);
+    return { deleted: true };
+  },
+});
+
 export const totals = query({
   args: { key: v.string() },
   returns: totalsValidator,

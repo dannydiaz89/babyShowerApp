@@ -42,6 +42,11 @@ export type Settings = {
   endISO: string;
   /** "YYYY-MM-DD" */
   rsvpDeadlineISO: string;
+  /**
+   * Where the event is, as an IANA time zone. "The event date" for the
+   * photo wall means the calendar date there, not on the server.
+   */
+  timeZone: string;
   tagline: Localized;
   dressCode: Localized;
   notes: Localized;
@@ -63,6 +68,32 @@ export type Settings = {
   photoStorage: PhotoStorage;
 };
 
+/**
+ * Time zones the settings form offers. Any valid IANA zone is accepted on
+ * save; these are the ones a host is likely to want without looking it up.
+ */
+export const TIME_ZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Mexico_City",
+] as const;
+
+/** Whether the runtime knows this zone. */
+export function isTimeZone(value: unknown): value is string {
+  if (typeof value !== "string" || !value) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Swatches offered for registry cards. Fixed so Tailwind can see the classes. */
 export const REGISTRY_ACCENTS = ["sage", "clay", "amber", "sky"] as const;
 
@@ -75,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startISO: "2026-10-18T14:00",
   endISO: "2026-10-18T17:00",
   rsvpDeadlineISO: "2026-10-01",
+  timeZone: "America/Chicago",
   tagline: {
     en: "A little one is on the way",
     es: "Viene un pequeñito en camino",

@@ -17,6 +17,7 @@ import {
 } from "@/lib/settings-tabs";
 import {
   DEFAULT_SETTINGS,
+  isTimeZone,
   PHOTO_STORAGE_OPTIONS,
   PHOTO_WALL_MODES,
   REGISTRY_ACCENTS,
@@ -94,6 +95,7 @@ function fieldsForTab(tab: SettingsTab, form: FormData, stored: Settings): Parti
         startISO: str(form, "startISO"),
         endISO: str(form, "endISO"),
         rsvpDeadlineISO: str(form, "rsvpDeadlineISO"),
+        timeZone: isTimeZone(str(form, "timeZone")) ? str(form, "timeZone") : stored.timeZone,
         contactName: str(form, "contactName"),
         contactEmail: str(form, "contactEmail"),
         giftShippingAddress: str(form, "giftShippingAddress"),

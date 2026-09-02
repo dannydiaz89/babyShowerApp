@@ -92,6 +92,30 @@ export const setHealth = mutation({
   },
 });
 
+/**
+ * Claim the right to re-probe a failing connection.
+ *
+ * Many page loads can notice the interval has passed at once; only the one
+ * that moves `lastCheckedAt` forward here gets to probe, so Google sees a
+ * single request rather than one per visitor. Only an "unavailable"
+ * failure is worth re-probing; a revoked grant needs the hosts.
+ */
+export const claimProbe = mutation({
+  args: { key: v.string(), intervalMs: v.number() },
+  returns: v.boolean(),
+  handler: async (ctx, { key, intervalMs }) => {
+    assertServer(key);
+    const existing = await connectionRow(ctx);
+    if (!existing || existing.health !== "failing" || existing.failureKind === "revoked") return false;
+
+    const now = Date.now();
+    if (now - (existing.lastCheckedAt ?? 0) < intervalMs) return false;
+
+    await ctx.db.patch(existing._id, { lastCheckedAt: now });
+    return true;
+  },
+});
+
 export const clear = mutation({
   args: { key: v.string() },
   returns: v.null(),

@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import { GuestHeader } from "@/components/SiteHeader";
 import { PhotoUploader } from "@/components/PhotoUploader";
 import { PageTitle } from "@/components/ui";
-import { PHOTO_BATCH_MAX, PHOTO_ORIGINAL_MAX_BYTES } from "../../../../convex/limits";
+import {
+  PHOTO_BATCH_MAX,
+  PHOTO_ORIGINAL_MAX_BYTES,
+  PHOTO_WEB_MAX_BYTES,
+} from "../../../../convex/limits";
 import { getTranslation } from "@/lib/i18n";
 import { wallState, webMaxEdgeFor } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
@@ -54,6 +58,7 @@ export default async function AddPhotosPage() {
         <PhotoUploader
           max={PHOTO_BATCH_MAX}
           maxBytes={PHOTO_ORIGINAL_MAX_BYTES}
+          maxWebBytes={PHOTO_WEB_MAX_BYTES}
           maxEdge={webMaxEdgeFor(settings.photoStorage)}
           keepsOriginals={settings.photoStorage === "drive"}
           t={t.photos}

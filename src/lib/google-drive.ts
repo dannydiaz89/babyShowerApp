@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { after } from "next/server";
 import { api } from "../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
 import { open, seal } from "@/lib/seal";
@@ -246,15 +247,29 @@ export async function probeDrive(): Promise<boolean> {
   }
 }
 
-/** Re-probe a failing-but-recoverable connection once the interval has passed. */
-export async function maybeReprobe(connection: DriveConnection): Promise<DriveConnection> {
+/**
+ * Arrange a re-probe of a failing-but-recoverable connection once the
+ * interval has passed — after this response has gone out, never in its way.
+ *
+ * The page serves the recorded state as it stands. The claim is one small
+ * mutation, and it is atomic: of the many requests that may notice the
+ * interval at once, one wins and the rest do nothing, so Google gets a
+ * single request per interval however busy the site is.
+ */
+export async function scheduleReprobe(connection: DriveConnection): Promise<DriveConnection> {
   if (connection.health !== "failing" || connection.failureKind === "revoked") return connection;
-  const since = Date.now() - (connection.lastCheckedAt ?? 0);
-  if (since < DRIVE_PROBE_INTERVAL_MS) return connection;
-  const ok = await probeDrive();
-  return ok
-    ? { ...connection, health: "ok", failureKind: null, failureMessage: null, failedAt: null }
-    : connection;
+  if (Date.now() - (connection.lastCheckedAt ?? 0) < DRIVE_PROBE_INTERVAL_MS) return connection;
+
+  try {
+    const claimed = await convexClient().mutation(api.drive.claimProbe, {
+      key: convexKey(),
+      intervalMs: DRIVE_PROBE_INTERVAL_MS,
+    });
+    if (claimed) after(() => probeDrive());
+  } catch (error) {
+    console.error("Scheduling a Drive probe failed", error);
+  }
+  return connection;
 }
 
 /** What Settings shows. Never includes the token. */

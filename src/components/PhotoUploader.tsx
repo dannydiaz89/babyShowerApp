@@ -84,12 +84,15 @@ function rememberName(name: string) {
 export function PhotoUploader({
   max,
   maxBytes,
+  maxWebBytes,
   maxEdge,
   keepsOriginals,
   t,
 }: {
   max: number;
   maxBytes: number;
+  /** The most the server accepts for a web copy; the encoder shrinks to fit. */
+  maxWebBytes: number;
   /** Long edge of the web copy, by where originals go. */
   maxEdge: number;
   /** Whether originals are kept (Google Drive) or only the web copy (this site). */
@@ -146,7 +149,7 @@ export function PhotoUploader({
     async (batch: Item[]) => {
       for (const item of batch) {
         try {
-          const prepared = await prepareImage(item.file, maxEdge);
+          const prepared = await prepareImage(item.file, maxEdge, maxWebBytes);
           patch(item.key, {
             prepared,
             thumbUrl: URL.createObjectURL(prepared.thumb),
@@ -154,14 +157,15 @@ export function PhotoUploader({
           });
         } catch (error) {
           const unreadable = error instanceof UnreadableImageError;
-          patch(item.key, {
-            status: "unreadable",
-            error: unreadable ? fill(t.unreadable, { name: item.file.name }) : t.errFailed,
-          });
+          const message = unreadable ? fill(t.unreadable, { name: item.file.name }) : t.errFailed;
+          patch(item.key, { status: "unreadable", error: message });
+          // Said out loud as well as on the tile, so a whole batch of
+          // unreadable files does not end in silence.
+          setNotes((current) => [...current, message]);
         }
       }
     },
-    [patch, t, maxEdge]
+    [patch, t, maxEdge, maxWebBytes]
   );
 
   /** The site refused the batch as a whole: stop everything and send the guest back. */
@@ -169,6 +173,33 @@ export function PhotoUploader({
     for (const item of itemsRef.current) item.controller?.abort();
     setPausedFull(full);
     setPhase("paused");
+  }
+
+  /**
+   * Where the batch stands once nothing is moving: finished when every
+   * counted photo is done, otherwise still uploading (something failed or
+   * is waiting). Runs after every upload ends, including a single retry,
+   * so a last retry that succeeds reaches the success screen.
+   */
+  function settle() {
+    setItems((current) => {
+      const moving = current.some((i) =>
+        ["queued", "uploading", "preparing", "ready"].includes(i.status)
+      );
+      const failed = current.some((i) => i.status === "failed");
+      setPhase((phase) =>
+        phase === "paused" || phase === "pick" ? phase : moving || failed ? "uploading" : "finished"
+      );
+      return current;
+    });
+  }
+
+  /** One failed photo again. Locked at once so a second tap cannot start it twice. */
+  async function retryOne(item: Item) {
+    if (item.status !== "failed") return;
+    patch(item.key, { status: "queued" });
+    await uploadOne(item, name.trim());
+    settle();
   }
 
   function pick(list: FileList | File[] | null) {
@@ -269,6 +300,9 @@ export function PhotoUploader({
     const uploaderName = name.trim();
     rememberName(uploaderName);
 
+    // Every photo has to be past preparation first: one still decoding
+    // would be left out of the batch and the success screen would lie.
+    if (items.some((i) => i.status === "preparing")) return;
     const queue = items.filter((i) => i.status === "ready" || i.status === "failed");
     if (queue.length === 0) return;
 
@@ -300,17 +334,13 @@ export function PhotoUploader({
     await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, pending.length) }, (_, i) => lane(i))
     );
-
-    setItems((current) => {
-      const unfinished = current.some((i) => i.status === "failed" || i.status === "queued");
-      setPhase((phase) => (phase === "paused" ? phase : unfinished ? "uploading" : "finished"));
-      return current;
-    });
+    settle();
   }
 
   /* --------------------------------------------------------- progress */
 
   const counted = items.filter((i) => i.status !== "unreadable");
+  const preparing = counted.some((i) => i.status === "preparing");
   const uploadable = counted.filter((i) => i.status === "ready" || i.status === "failed");
   const inFlight = counted.some((i) => i.status === "uploading" || i.status === "queued");
   const doneCount = counted.filter((i) => i.status === "done").length;
@@ -452,7 +482,7 @@ export function PhotoUploader({
         <Hint id={nameHintId}>{t.nameHint}</Hint>
       </div>
 
-      {counted.length > 0 ? (
+      {items.length > 0 ? (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5" aria-label={t.uploadTitle}>
           {items.map((item) => (
             <Thumb
@@ -460,7 +490,7 @@ export function PhotoUploader({
               item={item}
               phase={phase}
               onRemove={() => remove(item)}
-              onRetry={() => void uploadOne(item, name.trim())}
+              onRetry={() => void retryOne(item)}
               t={t}
             />
           ))}
@@ -492,13 +522,15 @@ export function PhotoUploader({
           type="button"
           className="w-full"
           onClick={() => void submit()}
-          disabled={inFlight || uploadable.length === 0}
+          disabled={inFlight || preparing || uploadable.length === 0}
         >
           {inFlight
             ? fill(t.submitting, { percent })
-            : failedCount > 0
-              ? t.retry
-              : t.submit}
+            : preparing
+              ? t.statusPreparing
+              : failedCount > 0
+                ? t.retry
+                : t.submit}
         </Button>
 
         <p className="mt-2.5 text-center text-xs text-ink-muted">

@@ -13,11 +13,11 @@ import {
 } from "../../convex/limits";
 import { convexClient, convexKey } from "@/lib/convex";
 import type { PhotoStorage } from "@/lib/defaults";
-import { getDriveConnection, googleConfigured, maybeReprobe } from "@/lib/google-drive";
+import { getDriveConnection, googleConfigured, scheduleReprobe } from "@/lib/google-drive";
 import {
   UPLOADER_COOKIE,
-  isUploaderId,
-  newUploaderId,
+  mintUploaderCookie,
+  readUploaderCookie,
   uploaderCookieOptions,
 } from "@/lib/photo-device";
 import { photoWallState, withStorage, type StorageStatus, type WallState } from "@/lib/photo-wall";
@@ -25,7 +25,7 @@ import { hasGuestAccess, isAdminSession } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 
 export type { PhotoTotals, PhotoView, WallFilter };
-export { UPLOADER_COOKIE, isUploaderId, newUploaderId, uploaderCookieOptions };
+export { UPLOADER_COOKIE, uploaderCookieOptions };
 
 /* ------------------------------------------------------------- identity */
 
@@ -34,8 +34,7 @@ export { UPLOADER_COOKIE, isUploaderId, newUploaderId, uploaderCookieOptions };
  * See lib/photo-device.ts for what the cookie is and why it exists.
  */
 export async function currentUploaderId(): Promise<string | null> {
-  const value = (await cookies()).get(UPLOADER_COOKIE)?.value;
-  return isUploaderId(value) ? value : null;
+  return readUploaderCookie((await cookies()).get(UPLOADER_COOKIE)?.value);
 }
 
 /**
@@ -49,9 +48,9 @@ export async function currentUploaderId(): Promise<string | null> {
 export async function ensureUploaderId(): Promise<string> {
   const existing = await currentUploaderId();
   if (existing) return existing;
-  const id = newUploaderId();
-  (await cookies()).set(UPLOADER_COOKIE, id, uploaderCookieOptions());
-  return id;
+  const signed = await mintUploaderCookie();
+  (await cookies()).set(UPLOADER_COOKIE, signed, uploaderCookieOptions());
+  return (await readUploaderCookie(signed))!;
 }
 
 export type Caller = {
@@ -82,15 +81,16 @@ export function webMaxEdgeFor(storage: PhotoStorage): number {
  * and the hosts' notices. Memoised per request: the header, the page and a
  * route can each ask.
  *
- * A failing-but-recoverable Drive connection is re-probed here once its
- * interval has passed, so an outage on Google's side clears itself on the
- * next page load after it ends, with no host involved.
+ * A failing-but-recoverable Drive connection is scheduled for a re-probe
+ * here once its interval has passed — after the response, never in its
+ * way — so an outage on Google's side clears itself on a later page load
+ * with no host involved. The recorded state is what this request serves.
  */
 export const storageStatus = cache(async (): Promise<StorageStatus> => {
   const settings = await getSettings();
   const [connection, totals] = await Promise.all([
     settings.photoStorage === "drive" && googleConfigured()
-      ? getDriveConnection().then((c) => (c ? maybeReprobe(c) : null))
+      ? getDriveConnection().then((c) => (c ? scheduleReprobe(c) : null))
       : Promise.resolve(null),
     loadTotals().catch((error) => {
       console.error("Reading the photo totals failed", error);
@@ -118,7 +118,8 @@ export const wallState = cache(async (): Promise<WallState> => {
       endISO: settings.endISO,
       closesISO: settings.photoWallClosesISO,
     },
-    new Date()
+    new Date(),
+    settings.timeZone
   );
   // Nothing to pause when the wall is not taking uploads anyway.
   if (!base.uploads) return base;
@@ -181,4 +182,13 @@ export async function storeWebCopy(copy: Blob): Promise<Id<"_storage">> {
 
   const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
   return storageId;
+}
+
+/** Best effort: remove a stored copy that ended up with no photo row. */
+export async function discardWebCopy(storageId: Id<"_storage">): Promise<void> {
+  try {
+    await convexClient().mutation(api.photos.discard, { key: convexKey(), storageId });
+  } catch (error) {
+    console.error("Discarding an orphaned web copy failed", error);
+  }
 }

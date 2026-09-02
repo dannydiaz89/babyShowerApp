@@ -15,6 +15,7 @@ export const editable = v.object({
   startISO: v.string(),
   endISO: v.string(),
   rsvpDeadlineISO: v.string(),
+  timeZone: v.string(),
   tagline: localized,
   dressCode: localized,
   notes: localized,

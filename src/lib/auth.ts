@@ -123,6 +123,28 @@ export async function verifyToken(
   return { issuedAt, expiresAt };
 }
 
+/**
+ * Sign an arbitrary value so a cookie holding it cannot be made up.
+ *
+ * Used for the photo device id: the value itself is random, but a caller
+ * who can choose it can choose a fresh one per request and walk past any
+ * limit keyed on it. The label keeps this signature distinct from a
+ * session token's, so one can never pass for the other.
+ */
+export async function signValue(label: string, value: string): Promise<string> {
+  return `${value}.${await hmac(`${label}:${value}`)}`;
+}
+
+/** The value inside a signed cookie, or null if the signature does not hold. */
+export async function verifySignedValue(label: string, signed: string | undefined): Promise<string | null> {
+  if (!signed) return null;
+  const at = signed.lastIndexOf(".");
+  if (at <= 0) return null;
+  const value = signed.slice(0, at);
+  const signature = signed.slice(at + 1);
+  return safeEqual(await hmac(`${label}:${value}`), signature) ? value : null;
+}
+
 /** Shared cookie options, so login and logout paths cannot drift apart. */
 export function cookieOptions(role: Role) {
   return {

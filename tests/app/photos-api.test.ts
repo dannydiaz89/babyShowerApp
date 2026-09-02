@@ -50,7 +50,7 @@ vi.mock("@/lib/google-drive", () => ({
   },
   googleConfigured: () => true,
   getDriveConnection: async () => driveConnection,
-  maybeReprobe: async (c: unknown) => c,
+  scheduleReprobe: async (c: unknown) => c,
   openUploadSession: (...args: unknown[]) => openUploadSession(...args),
   verifyUploadedFile: (...args: unknown[]) => verifyUploadedFile(...args),
   deleteFile: (...args: unknown[]) => deleteFile(...args),
@@ -63,8 +63,18 @@ const fetchMock = vi.fn(async () =>
 );
 vi.stubGlobal("fetch", fetchMock);
 
-const { createToken, GUEST_COOKIE, ADMIN_COOKIE } = await import("../../src/lib/auth");
+const { createToken, signValue, GUEST_COOKIE, ADMIN_COOKIE } = await import("../../src/lib/auth");
 const { UPLOADER_COOKIE } = await import("../../src/lib/photos");
+
+/** The device cookie as the middleware would have set it: the id, signed. */
+async function deviceCookie(id: string): Promise<string> {
+  return signValue("photo-device", id);
+}
+
+/** The id inside a signed device cookie, without checking the signature. */
+function idOf(cookie: string | undefined): string | undefined {
+  return cookie?.split(".")[0];
+}
 const session = await import("../../src/app/api/photos/session/route");
 const photos = await import("../../src/app/api/photos/route");
 const one = await import("../../src/app/api/photos/[id]/route");
@@ -158,6 +168,8 @@ beforeEach(() => {
         return { ok: true };
       case "photos:remove":
         return { driveFileId: "drive-1" };
+      case "photos:discard":
+        return { deleted: true };
       default:
         throw new Error("unexpected mutation");
     }
@@ -219,7 +231,7 @@ describe("POST /api/photos/session", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ sessionUrl: "https://www.googleapis.com/upload/x" });
-    expect(cookieJar.get(UPLOADER_COOKIE)).toMatch(/^[a-f0-9]{32}$/);
+    expect(cookieJar.get(UPLOADER_COOKIE)).toMatch(/^[a-f0-9]{32}\.[a-f0-9]{64}$/);
     expect(openUploadSession).toHaveBeenCalledWith(
       expect.objectContaining({ name: "IMG_1.jpg", mimeType: "image/jpeg", origin: BASE })
     );
@@ -227,10 +239,49 @@ describe("POST /api/photos/session", () => {
 
   it("keeps the device cookie it already has", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    const signed = await deviceCookie(DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, signed);
 
     await session.POST(json("/api/photos/session", SESSION_BODY));
-    expect(cookieJar.get(UPLOADER_COOKIE)).toBe(DEVICE);
+    expect(cookieJar.get(UPLOADER_COOKIE)).toBe(signed);
+  });
+
+  it("treats a made-up device cookie as missing and replaces it, so it cannot be the limit's key", async () => {
+    await asGuest();
+    // Well-formed, but not signed by this server.
+    cookieJar.set(UPLOADER_COOKIE, `${DEVICE}.${"0".repeat(64)}`);
+
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    const replaced = cookieJar.get(UPLOADER_COOKIE);
+    expect(idOf(replaced)).not.toBe(DEVICE);
+    expect(replaced).toMatch(/^[a-f0-9]{32}\.[a-f0-9]{64}$/);
+    const limitIds = called("rateLimit:consume").map(([, args]) => String(args.id));
+    expect(limitIds.some((id) => id.includes(DEVICE))).toBe(false);
+  });
+
+  it("counts a session against the device and against the address", async () => {
+    await asGuest();
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
+
+    await session.POST(json("/api/photos/session", SESSION_BODY));
+
+    const limitIds = called("rateLimit:consume").map(([, args]) => String(args.id));
+    expect(limitIds).toEqual(
+      expect.arrayContaining([`photos:session:${DEVICE}`, "photos:session:ip:203.0.113.9"])
+    );
+  });
+
+  it("stops when the address is over its limit even if the device is not", async () => {
+    await asGuest();
+    mutation.mockImplementation(async (fn: unknown, args: Record<string, unknown>) =>
+      getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "rateLimit:consume"
+        ? { allowed: !String(args.id).includes(":ip:"), retryAfterMs: 0 }
+        : { ok: true }
+    );
+
+    const response = await session.POST(json("/api/photos/session", SESSION_BODY));
+    expect(response.status).toBe(429);
   });
 
   it("opens no Drive session when the hosts chose this site, and never asks Google", async () => {
@@ -332,7 +383,7 @@ describe("POST /api/photos", () => {
 
   it("records the photo under the device cookie", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
 
     const response = await photos.POST(finalizeForm({ uploaderName: " Tía Rosa " }));
 
@@ -367,6 +418,41 @@ describe("POST /api/photos", () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "storage-full" });
+  });
+
+  it("refuses a photo with no Drive original while Drive is the chosen storage", async () => {
+    settings = open("open", "drive");
+    driveConnection = HEALTHY_DRIVE;
+    await asGuest();
+
+    const response = await photos.POST(finalizeForm());
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(called("photos:create")).toHaveLength(0);
+  });
+
+  it("takes the stored copy back out when the record itself fails", async () => {
+    await asGuest();
+    mutation.mockImplementation(async (fn: unknown) => {
+      switch (getFunctionName(fn as Parameters<typeof getFunctionName>[0])) {
+        case "rateLimit:consume":
+          return { allowed: true, retryAfterMs: 0 };
+        case "photos:generateUploadUrl":
+          return "https://example.convex.cloud/upload";
+        case "photos:create":
+          throw new Error("Convex hiccup");
+        case "photos:discard":
+          return { deleted: true };
+        default:
+          throw new Error("unexpected mutation");
+      }
+    });
+
+    const response = await photos.POST(finalizeForm());
+
+    expect(response.status).toBe(500);
+    expect(called("photos:discard")[0][1]).toMatchObject({ storageId: "storage-1" });
   });
 
   it("checks a claimed Drive file against the folder before recording it", async () => {
@@ -411,7 +497,7 @@ describe("POST /api/photos", () => {
 describe("GET /api/photos", () => {
   it("shows a guest the live wall whatever filter they ask for", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
 
     const response = await photos.GET(new Request(`${BASE}/api/photos?filter=hidden`));
 
@@ -453,7 +539,7 @@ describe("POST /api/photos/:id/hide", () => {
 
   it("hides as the device, and lets the mutation decide ownership", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
 
     const response = await hide.POST(new Request(`${BASE}/api/photos/p1/hide`, { method: "POST" }), params("p1"));
 
@@ -463,7 +549,7 @@ describe("POST /api/photos/:id/hide", () => {
 
   it("turns the mutation's refusal into forbidden", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, OTHER);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(OTHER));
     mutation.mockImplementation(async (fn: unknown) =>
       getFunctionName(fn as Parameters<typeof getFunctionName>[0]) === "photos:hide"
         ? { ok: false }
@@ -493,7 +579,7 @@ describe("POST /api/photos/:id/hide", () => {
 describe("host-only routes", () => {
   it("restore refuses a guest, even one with a device cookie", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
 
     const response = await restore.POST(new Request(`${BASE}/api/photos/p1/restore`, { method: "POST" }), params("p1"));
 
@@ -509,7 +595,7 @@ describe("host-only routes", () => {
 
   it("delete refuses a guest and touches nothing", async () => {
     await asGuest();
-    cookieJar.set(UPLOADER_COOKIE, DEVICE);
+    cookieJar.set(UPLOADER_COOKIE, await deviceCookie(DEVICE));
 
     const response = await one.DELETE(new Request(`${BASE}/api/photos/p1`, { method: "DELETE" }), params("p1"));
 

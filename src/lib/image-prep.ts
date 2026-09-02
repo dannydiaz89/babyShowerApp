@@ -8,7 +8,7 @@
  * The arithmetic is separated from the browser calls so it can be tested;
  * everything that needs a canvas is kept thin.
  */
-import { PHOTO_WEB_MAX_EDGE_SITE } from "../../convex/limits";
+import { PHOTO_WEB_MAX_BYTES, PHOTO_WEB_MAX_EDGE_SITE } from "../../convex/limits";
 
 export type Size = { width: number; height: number };
 
@@ -106,16 +106,42 @@ function encode(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   });
 }
 
+/**
+ * The steps taken when a first encode comes out over the server's limit:
+ * quality first, since that costs least visually, then a smaller edge. A
+ * busy, high-detail photo can encode to several megabytes at the default
+ * quality, and a copy the server refuses would fail on every retry.
+ */
+const SHRINK_STEPS: { quality: number; scale: number }[] = [
+  { quality: 0.82, scale: 1 },
+  { quality: 0.7, scale: 1 },
+  { quality: 0.6, scale: 1 },
+  { quality: 0.6, scale: 0.8 },
+  { quality: 0.55, scale: 0.65 },
+  { quality: 0.5, scale: 0.5 },
+];
+
 export async function prepareImage(
   file: File,
-  maxEdge: number = PHOTO_WEB_MAX_EDGE_SITE
+  maxEdge: number = PHOTO_WEB_MAX_EDGE_SITE,
+  maxBytes: number = PHOTO_WEB_MAX_BYTES
 ): Promise<PreparedImage> {
   const img = await load(file);
   const natural = { width: img.naturalWidth, height: img.naturalHeight };
 
-  const webSize = fitWithin(natural, maxEdge);
-  const webCanvas = draw(img, webSize);
-  const web = await encode(webCanvas, WEB_QUALITY);
+  let webSize = fitWithin(natural, maxEdge);
+  let webCanvas = draw(img, webSize);
+  let web = await encode(webCanvas, WEB_QUALITY);
+
+  for (const step of SHRINK_STEPS) {
+    if (web.size <= maxBytes) break;
+    if (step.scale !== 1) {
+      webSize = fitWithin(natural, Math.round(maxEdge * step.scale));
+      webCanvas = draw(img, webSize);
+    }
+    web = await encode(webCanvas, step.quality);
+  }
+  if (web.size > maxBytes) throw new UnreadableImageError();
 
   // The thumbnail comes from the web copy, not the original: far fewer
   // pixels to push through the canvas a second time.

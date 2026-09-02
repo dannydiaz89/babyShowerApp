@@ -79,8 +79,8 @@ self-hosted backend as a Docker image that keeps files on a local volume, so
 the same code path is "local storage" in a container later.
 
 **When it opens and closes.** By default the wall opens at midnight on the
-event date, in `America/Los_Angeles` (`EVENT_TIME_ZONE` in
-`src/lib/photo-wall.ts`). Settings → Photos can open it now, for a test run,
+event date, by the clock in the event's time zone — set on the Event tab in
+Settings, and worth checking before the day. Settings → Photos can open it now, for a test run,
 and holds the closing date and time, preset to a week after the event. On
 that moment uploads stop while what was added stays viewable. Change it if
 you like; left as the preset it follows the event date if that moves.
@@ -267,7 +267,10 @@ What's in place:
   server answers `mine: true` per photo — so nobody can hide another phone's
   photos, and nothing a guest does deletes anything. Hosts delete.
 - **Every photo route checks the session itself**, like the Server Actions.
-  Upload session opens, uploads and removals are throttled per device.
+  Upload session opens and uploads are throttled per device *and* per
+  address; the device cookie is signed, so it cannot be made up to dodge
+  the device limit, and a fresh one costs a page load that the address
+  limit still counts.
 - **The Drive refresh token is sealed** (AES-GCM under a key derived from
   `AUTH_SECRET`) before it is stored, so a copy of the database alone cannot
   reach your Drive. The site asks Google for the `drive.file` scope only.
@@ -277,9 +280,10 @@ What's in place:
 
 Known limits, stated plainly:
 
-- Changing the guest password stops new sign-ins with the old one. Guests
-  already signed in keep their session until it expires — signed cookies are
-  checked without a database round trip, which is what keeps the site fast.
+- Changing the guest password signs every guest out. Cookies are signed
+  rather than stored, so nothing on the server is deleted; instead each guest
+  page refuses a cookie minted before the last password change, and the
+  guest enters the new password once.
 - Rate limiting is per IP address. It stops scripted guessing; it does not stop
   a determined attacker with many addresses. A strong admin password does.
 - Anyone with the admin password can export the entire guest list as a CSV.

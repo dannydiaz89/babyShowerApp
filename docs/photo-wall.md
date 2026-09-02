@@ -119,6 +119,33 @@ and pure helpers first so the UI is built on tested ground.
       host restore and delete (done on the dev deployment without Google
       configured, so the Drive half ran its "not connected" path)
 
+## Found in review (PR #4)
+
+Eleven findings, all fixed on the branch:
+
+- The device cookie was unsigned, so a caller could pick a fresh one per
+  request and walk past the per-device limits. It is signed now, and the
+  routes also limit per address.
+- Drive mode accepted a photo with no Drive original if the client simply
+  did not send one. Refused now.
+- A web copy stored just before the record failed was left in storage with
+  no row, no meter entry and nothing to delete. The route discards it.
+- The Drive re-probe ran inside page renders, up to Google's 15 s timeout,
+  and every concurrent visitor could start one. It now runs after the
+  response, once per interval, behind an atomic claim.
+- The web copy was encoded once at one quality; a busy photo could exceed
+  the server's 1.5 MB limit and fail on every retry. The encoder now steps
+  down quality, then size, until it fits.
+- Upload could start with photos still preparing, and a lone retry never
+  reached the success screen. Both go through one batch coordinator now.
+- A batch of unreadable files showed nothing. Each one is announced.
+- The viewer was a div with a dialog role: no focus trap, hidden controls
+  still tabbable. It is a native `<dialog>` now, and hidden controls are
+  `visibility: hidden`.
+- The time zone was a constant that did not match the sample event. It is a
+  setting on the Event tab.
+- The README still said guest sessions survive a password change.
+
 ## Found while verifying
 
 - **Three uploads at once minted three device cookies.** The first request

@@ -3,7 +3,7 @@ import { PHOTO_ORIGINAL_MAX_BYTES } from "../../../../../convex/limits";
 import { openUploadSession, recordDriveFailure } from "@/lib/google-drive";
 import { ensureUploaderId, photoCaller, wallState } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
-import { PHOTO_RATE, refuse, withinLimit } from "@/lib/photo-routes";
+import { refuse, withinLimits } from "@/lib/photo-routes";
 
 /*
  * POST /api/photos/session
@@ -35,9 +35,7 @@ export async function POST(request: Request) {
   if (!state.uploads && caller.role !== "host") return refuse("closed", 403);
 
   const uploaderId = await ensureUploaderId();
-  if (!(await withinLimit(`photos:session:${uploaderId}`, PHOTO_RATE.sessions))) {
-    return refuse("rate-limited", 429);
-  }
+  if (!(await withinLimits("session", uploaderId))) return refuse("rate-limited", 429);
 
   let body: Body;
   try {

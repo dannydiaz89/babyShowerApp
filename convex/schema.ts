@@ -59,6 +59,12 @@ export default defineSchema({
     startISO: v.string(),
     endISO: v.string(),
     rsvpDeadlineISO: v.string(),
+    /*
+     * Where the event is, as an IANA zone. Decides when the photo wall
+     * opens and closes. Optional: rows from before it existed read as the
+     * built-in default.
+     */
+    timeZone: v.optional(v.string()),
 
     // Free text, per language
     tagline: localized,
@@ -166,7 +172,9 @@ export default defineSchema({
     // Convex appends _creationTime, so this orders live (or hidden) photos by
     // time without touching the other status. "All", for the hosts, walks the
     // built-in creation-time index instead.
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    // So a stored copy can be checked for a row before being discarded.
+    .index("by_webStorageId", ["webStorageId"]),
 
   /**
    * How many photos are live and hidden. Convex has no count operator, and

@@ -1,4 +1,5 @@
 import "server-only";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { api } from "../../convex/_generated/api";
 import { convexClient, convexKey } from "@/lib/convex";
@@ -15,15 +16,26 @@ import type { PhotoErrorCode } from "@/lib/photo-codes";
 const HOUR = 60 * 60 * 1000;
 
 /**
- * Per device, per hour. Generous for a guest — ten photos is three requests
- * each — and small against someone with the guest password scripting
- * uploads to fill the wall or the storage.
+ * Per hour. The device limits are what a guest feels — ten photos is a
+ * handful of requests each. The per-address limits are the backstop: a
+ * device id is signed, but a fresh one costs only a page load, so a
+ * scripted caller is bounded by where it comes from as well. A venue's
+ * shared Wi-Fi puts sixty guests behind one address, which is what the
+ * address figures are sized for.
  */
 export const PHOTO_RATE = {
-  sessions: 150,
-  creates: 150,
+  sessions: 60,
+  creates: 60,
   hides: 60,
+  sessionsPerAddress: 900,
+  createsPerAddress: 900,
 } as const;
+
+/** Who is calling, as an address. Behind Vercel this is the real client. */
+export async function clientAddress(): Promise<string> {
+  const h = await headers();
+  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
+}
 
 /** A refusal the client can put words to. */
 export function refuse(code: PhotoErrorCode, status: number): NextResponse {
@@ -50,6 +62,22 @@ export async function withinLimit(id: string, limit: number): Promise<boolean> {
     console.error("Photo rate limit check failed", error);
     return true;
   }
+}
+
+/** Both limits for one kind of request: the device's and its address's. */
+export async function withinLimits(
+  kind: "session" | "create",
+  uploaderId: string
+): Promise<boolean> {
+  const address = await clientAddress();
+  const [device, byAddress] = await Promise.all([
+    withinLimit(`photos:${kind}:${uploaderId}`, kind === "session" ? PHOTO_RATE.sessions : PHOTO_RATE.creates),
+    withinLimit(
+      `photos:${kind}:ip:${address}`,
+      kind === "session" ? PHOTO_RATE.sessionsPerAddress : PHOTO_RATE.createsPerAddress
+    ),
+  ]);
+  return device && byAddress;
 }
 
 /** A photo id as it arrives in a URL: something Convex could accept, or nothing. */

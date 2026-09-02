@@ -3,8 +3,8 @@ import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
 import {
   UPLOADER_COOKIE,
-  isUploaderId,
-  newUploaderId,
+  mintUploaderCookie,
+  readUploaderCookie,
   uploaderCookieOptions,
 } from "@/lib/photo-device";
 
@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
     return response;
   };
-  const proceed = () => {
+  const proceed = async () => {
     const response = send(NextResponse.next({ request: { headers: requestHeaders } }));
     /*
      * The photo pages get their device cookie here, on the page load, not on
@@ -51,12 +51,13 @@ export async function middleware(request: NextRequest) {
      * none of them had a cookie yet each would mint its own — three ids for
      * one phone, and two thirds of its photos not "yours". The routes still
      * mint one if it is missing, as a fallback; this just makes sure it is not.
+     * A cookie that does not carry a valid signature counts as missing.
      */
     if (
       pathname.startsWith("/photos") &&
-      !isUploaderId(request.cookies.get(UPLOADER_COOKIE)?.value)
+      !(await readUploaderCookie(request.cookies.get(UPLOADER_COOKIE)?.value))
     ) {
-      response.cookies.set(UPLOADER_COOKIE, newUploaderId(), uploaderCookieOptions());
+      response.cookies.set(UPLOADER_COOKIE, await mintUploaderCookie(), uploaderCookieOptions());
     }
     return response;
   };

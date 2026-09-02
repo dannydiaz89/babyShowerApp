@@ -35,7 +35,13 @@ describe("seal / open", () => {
   it("refuses a value that has been altered", async () => {
     const sealed = await seal("1//refresh-token", SECRET);
     const [v, nonce, body] = sealed.split(".");
-    const flipped = body.replace(/.$/, (c) => (c === "A" ? "B" : "A"));
+    /*
+     * Alter a character in the middle, not the last one: the final base64
+     * character can carry only padding bits, and changing those decodes to
+     * the same bytes — which made this test flaky about one run in twenty.
+     */
+    const at = 5;
+    const flipped = body.slice(0, at) + (body[at] === "A" ? "B" : "A") + body.slice(at + 1);
     expect(await open(`${v}.${nonce}.${flipped}`, SECRET)).toBeNull();
   });
 

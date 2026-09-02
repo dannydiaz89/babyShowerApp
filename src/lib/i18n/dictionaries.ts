@@ -254,6 +254,8 @@ export const en = {
     start: "Starts",
     end: "Ends",
     deadline: "RSVP deadline",
+    timeZone: "Time zone",
+    timeZoneHint: "Where the event is. The photo wall opens and closes by the clock there.",
 
     invalidDate: "That isn't a date we can read. Try 12/25/2026.",
     invalidTime: "That isn't a time we can read. Try 3:00 PM.",
@@ -330,7 +332,7 @@ export const en = {
     wallMode: "Photo wall",
     wallModeAuto: "Open automatically on the event date",
     wallModeAutoHint:
-      "Guests get a Photos tab and a banner on the invitation from midnight on {date}.",
+      "Guests get a Photos tab and a banner on the invitation from midnight on {date}, {zone} time.",
     wallModeOpen: "Open now",
     wallModeOpenHint: "For a test run, or to start early.",
     wallCloses: "Closes to new photos",
@@ -748,6 +750,8 @@ export const es: Dictionary = {
     start: "Comienza",
     end: "Termina",
     deadline: "Fecha límite para confirmar",
+    timeZone: "Zona horaria",
+    timeZoneHint: "Dónde es el evento. El muro de fotos abre y cierra según el reloj de ahí.",
 
     invalidDate: "No podemos leer esa fecha. Prueben 25/12/2026.",
     invalidTime: "No podemos leer esa hora. Prueben 3:00 p. m.",
@@ -825,7 +829,7 @@ export const es: Dictionary = {
     wallMode: "Muro de fotos",
     wallModeAuto: "Abrir automáticamente el día del evento",
     wallModeAutoHint:
-      "Los invitados ven la pestaña Fotos y un aviso en la invitación desde la medianoche del {date}.",
+      "Los invitados ven la pestaña Fotos y un aviso en la invitación desde la medianoche del {date}, hora de {zone}.",
     wallModeOpen: "Abrir ahora",
     wallModeOpenHint: "Para hacer una prueba o empezar antes.",
     wallCloses: "Se cierra a fotos nuevas",

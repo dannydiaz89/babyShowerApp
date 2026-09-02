@@ -198,6 +198,24 @@ describe("drive health", () => {
     expect(second?.failureMessage).toBe("again");
   });
 
+  it("hands the re-probe to one caller per interval, and never for a revoked grant", async () => {
+    const t = db();
+    await t.mutation(api.drive.set, base);
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "unavailable" });
+
+    // Recorded just now, so the interval has not passed.
+    expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 60_000 })).toBe(false);
+    // Any interval that has passed: the first claim wins, the next does not.
+    expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 0 })).toBe(true);
+    expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 60_000 })).toBe(false);
+
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "failing", kind: "revoked" });
+    expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 0 })).toBe(false);
+
+    await t.mutation(api.drive.setHealth, { key: KEY, health: "ok" });
+    expect(await t.mutation(api.drive.claimProbe, { key: KEY, intervalMs: 0 })).toBe(false);
+  });
+
   it("clears the failure on a healthy answer, and on a reconnect", async () => {
     const t = db();
     await t.mutation(api.drive.set, base);
@@ -346,6 +364,21 @@ describe("restore", () => {
     expect(live.page.map((p) => p.id)).toEqual([photo.id]);
     expect(live.page[0].hiddenBy).toBeUndefined();
     expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
+  });
+});
+
+describe("discard", () => {
+  it("deletes a stored copy no photo points at, and leaves one that a photo uses", async () => {
+    const t = db();
+    const orphan = await storeCopy(t);
+    const used = await storeCopy(t);
+    await addPhoto(t, "dev-a", { webStorageId: used });
+
+    expect(await t.mutation(api.photos.discard, { key: KEY, storageId: orphan })).toEqual({ deleted: true });
+    expect(await t.mutation(api.photos.discard, { key: KEY, storageId: used })).toEqual({ deleted: false });
+
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(orphan))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(used))).not.toBeNull();
   });
 });
 
