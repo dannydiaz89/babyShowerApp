@@ -104,7 +104,82 @@ export default defineSchema({
      */
     guestSessionEpoch: v.optional(v.number()),
 
+    /*
+     * When guests may add photos. "auto" opens the wall on the event date and
+     * leaves it open; "open" opens it now, for a test run; "closed" stops
+     * uploads but keeps what was added viewable. Optional: rows written
+     * before the photo wall existed read as "auto".
+     */
+    photoWall: v.optional(
+      v.union(v.literal("auto"), v.literal("open"), v.literal("closed"))
+    ),
+
     updatedAt: v.number(),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
+   * One guest-uploaded photo.
+   *
+   * The original lives in the hosts' Google Drive and is never read back by
+   * the site; `driveFileId` is kept so a host delete can remove it. What the
+   * wall shows is the web copy in Convex storage, made on the guest's phone.
+   *
+   * `uploaderId` is the random id from that device's cookie. It is the only
+   * link between a photo and the phone that added it, so it must never be
+   * returned to a browser: anyone holding it could hide that device's photos.
+   * The wall query answers `mine: true` instead.
+   */
+  photos: defineTable({
+    status: v.union(v.literal("live"), v.literal("hidden")),
+    uploaderId: v.string(),
+    uploaderName: v.optional(v.string()),
+
+    webStorageId: v.id("_storage"),
+    // Pixel size of the web copy, so the wall can lay rows out before the
+    // image bytes arrive.
+    width: v.number(),
+    height: v.number(),
+    webBytes: v.number(),
+
+    driveFileId: v.optional(v.string()),
+    originalName: v.optional(v.string()),
+    originalBytes: v.optional(v.number()),
+
+    hiddenAt: v.optional(v.number()),
+    hiddenBy: v.optional(v.union(v.literal("guest"), v.literal("host"))),
+  })
+    // Convex appends _creationTime, so this orders live (or hidden) photos by
+    // time without touching the other status. "All", for the hosts, walks the
+    // built-in creation-time index instead.
+    .index("by_status", ["status"]),
+
+  /**
+   * How many photos are live and hidden. Convex has no count operator, and
+   * the wall header and the host filter both show these; kept in step by
+   * every photo write in the same transaction, like `rsvpTotals`.
+   */
+  photoTotals: defineTable({
+    singleton: v.literal("photos"),
+    live: v.number(),
+    hidden: v.number(),
+  }).index("by_singleton", ["singleton"]),
+
+  /**
+   * The hosts' Google Drive, connected once from Settings.
+   *
+   * `refreshTokenSealed` is encrypted by the Next.js server with a key derived
+   * from AUTH_SECRET before it gets here (see src/lib/seal.ts), so a copy of
+   * the database alone cannot reach the Drive. The app only ever holds the
+   * `drive.file` scope, which reaches files it created and nothing else.
+   */
+  driveConnection: defineTable({
+    singleton: v.literal("drive"),
+    account: v.string(),
+    folderId: v.string(),
+    folderName: v.string(),
+    folderUrl: v.string(),
+    refreshTokenSealed: v.string(),
+    connectedAt: v.number(),
   }).index("by_singleton", ["singleton"]),
 
   /**

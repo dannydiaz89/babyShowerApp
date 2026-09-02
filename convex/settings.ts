@@ -33,6 +33,7 @@ export const editable = v.object({
   askMeal: v.boolean(),
   allowKids: v.boolean(),
   collectPhone: v.boolean(),
+  photoWall: v.union(v.literal("auto"), v.literal("open"), v.literal("closed")),
 });
 
 /** The one settings row, or null if the hosts have never saved. */

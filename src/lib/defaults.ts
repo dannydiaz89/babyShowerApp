@@ -14,6 +14,14 @@ export type Registry = {
   accent: string;
 };
 
+/**
+ * When guests may add photos. "auto" opens the wall on the event date and
+ * leaves it open; "open" opens it now; "closed" stops uploads but keeps what
+ * was added viewable. See src/lib/photo-wall.ts for the rule.
+ */
+export const PHOTO_WALL_MODES = ["auto", "open", "closed"] as const;
+export type PhotoWallMode = (typeof PHOTO_WALL_MODES)[number];
+
 export type Settings = {
   babyName: string;
   honorees: string;
@@ -36,6 +44,7 @@ export type Settings = {
   askMeal: boolean;
   allowKids: boolean;
   collectPhone: boolean;
+  photoWall: PhotoWallMode;
 };
 
 /** Swatches offered for registry cards. Fixed so Tailwind can see the classes. */
@@ -103,4 +112,5 @@ export const DEFAULT_SETTINGS: Settings = {
   askMeal: true,
   allowKids: true,
   collectPhone: true,
+  photoWall: "auto",
 };

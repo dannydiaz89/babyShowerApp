@@ -53,37 +53,37 @@ Each box is one unit of work; ticked as it lands. Order matters: the backend
 and pure helpers first so the UI is built on tested ground.
 
 ### 1. Backend
-- [ ] `photos` table (status, uploader, web copy, drive id, hidden-by) with a
+- [x] `photos` table (status, uploader, web copy, drive id, hidden-by) with a
       `by_status` index; `photoTotals` counter row; `driveConnection` row
-- [ ] `settings.photoWall` mode (`auto` / `open` / `closed`)
-- [ ] `convex/photos.ts`: upload URL, create, paginated wall (live for guests,
+- [x] `settings.photoWall` mode (`auto` / `open` / `closed`)
+- [x] `convex/photos.ts`: upload URL, create, paginated wall (live for guests,
       any filter for hosts, `mine` computed server-side), hide, restore,
       remove (deletes the web copy in the same transaction), totals
-- [ ] `convex/drive.ts`: get / set / clear the Drive connection
-- [ ] Tests against a real database (`tests/convex/photos.test.ts`): a
+- [x] `convex/drive.ts`: get / set / clear the Drive connection
+- [x] Tests against a real database (`tests/convex/photos.test.ts`): a
       non-owner cannot hide, hide/restore/remove keep the totals honest, the
       uploader id never appears in a wall page, remove deletes the stored file
 
 ### 2. Pure helpers
-- [ ] `lib/photo-wall.ts`: is the wall open, from the mode, event date and
+- [x] `lib/photo-wall.ts`: is the wall open, from the mode, event date and
       a time zone — no wall clock inside
-- [ ] `lib/justified.ts`: the row layout, given aspect ratios and a width
-- [ ] `lib/seal.ts`: AES-GCM sealing for the Drive refresh token, keyed from
+- [x] `lib/justified.ts`: the row layout, given aspect ratios and a width
+- [x] `lib/seal.ts`: AES-GCM sealing for the Drive refresh token, keyed from
       `AUTH_SECRET`
-- [ ] `lib/csp.ts`: image origin for the web copies, connect origin for Drive
-- [ ] `lib/image-prep.ts`: fit-within maths (the browser half is untestable
+- [x] `lib/csp.ts`: image origin for the web copies, connect origin for Drive
+- [x] `lib/image-prep.ts`: fit-within maths (the browser half is untestable
       here and is kept thin)
-- [ ] Tests for each
+- [x] Tests for each
 
 ### 3. Server side
-- [ ] `lib/google-drive.ts`: OAuth URLs, token exchange and refresh, create
+- [x] `lib/google-drive.ts`: OAuth URLs, token exchange and refresh, create
       folder, open a resumable session, get and delete a file
-- [ ] `lib/photos.ts`: the device cookie, page loading, the storage seam
-- [ ] `/api/photos/session`, `/api/photos` (finalize), `/api/photos` (page),
+- [x] `lib/photos.ts`: the device cookie, page loading, the storage seam
+- [x] `/api/photos/session`, `/api/photos` (finalize), `/api/photos` (page),
       `/api/photos/[id]/hide|restore`, `DELETE /api/photos/[id]`
-- [ ] `/api/google/start`, `/api/google/callback`, `/api/google/disconnect`
-- [ ] Rate limits on session opens and hides
-- [ ] Tests: every route refuses a caller with no session; hide checks the
+- [x] `/api/google/start`, `/api/google/callback`, `/api/google/disconnect`
+- [x] Rate limits on session opens and hides
+- [x] Tests: every route refuses a caller with no session; hide checks the
       device cookie; delete is hosts-only and removes the Drive file
 
 ### 4. Guest UI

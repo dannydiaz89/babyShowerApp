@@ -41,3 +41,31 @@ export const MEAL_TALLY_READ_LIMIT = 500;
  * labels, so reaching this needs a long history of menu changes.
  */
 export const MEAL_TALLY_REBUILD_LIMIT = 2048;
+
+/* ------------------------------------------------------------ photo wall */
+
+/** How many photos one upload batch may hold. */
+export const PHOTO_BATCH_MAX = 10;
+
+/** The largest original the site will open a Drive upload for. */
+export const PHOTO_ORIGINAL_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * The largest web copy accepted into Convex storage.
+ *
+ * A copy is ~1600px on its long edge and lands well under 300 KB; this is a
+ * ceiling against a client that skips the resize, not a target.
+ */
+export const PHOTO_WEB_MAX_BYTES = 1.5 * 1024 * 1024;
+
+/** Long edge of a web copy, in pixels. The phone resizes to this. */
+export const PHOTO_WEB_MAX_EDGE = 1600;
+
+/** A width or height past this is not a photo the wall can lay out. */
+export const PHOTO_MAX_DIMENSION = 8000;
+
+/** Photos per wall page, from the first server render and each scroll. */
+export const PHOTO_PAGE_SIZE = 24;
+
+/** The optional name shown under a guest's photos. */
+export const PHOTO_UPLOADER_NAME_MAX = 60;

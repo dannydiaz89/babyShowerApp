@@ -3,13 +3,23 @@ import { ADMIN_COOKIE, GUEST_COOKIE, verifyToken } from "@/lib/auth";
 import { contentSecurityPolicy, cspNonce } from "@/lib/csp";
 
 /** Everything a guest needs the password to reach. */
-const GUEST_PATHS = ["/invitation", "/rsvp", "/registry"];
+const GUEST_PATHS = ["/invitation", "/rsvp", "/registry", "/photos"];
+
+/**
+ * Photo web copies are served from Convex storage, which lives at the
+ * deployment URL; originals go from the phone straight to Google Drive.
+ * Both origins are named here so the policy can stay strict everywhere else.
+ */
+const DRIVE_UPLOAD_ORIGIN = "https://www.googleapis.com";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const nonce = cspNonce();
-  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development");
+  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV === "development", {
+    imageOrigins: process.env.CONVEX_URL ? [process.env.CONVEX_URL] : [],
+    connectOrigins: [DRIVE_UPLOAD_ORIGIN],
+  });
 
   /*
    * The policy travels inbound as well as back out. Next.js reads the nonce off

@@ -12,7 +12,39 @@
  * static, and a nonce that repeats across requests is a nonce in name only —
  * an attacker who can read one page can reuse it.
  */
-export function contentSecurityPolicy(nonce: string, isDev: boolean): string {
+export type CspOrigins = {
+  /**
+   * Where photo web copies are served from — the Convex storage host. Only
+   * `img-src`: nothing else on the page is allowed to reach it.
+   */
+  imageOrigins?: string[];
+  /**
+   * Where the browser may send a request. Google's upload endpoint, so a
+   * phone can PUT an original straight to the hosts' Drive without the
+   * bytes passing through this server.
+   */
+  connectOrigins?: string[];
+};
+
+/** Keep only well-formed https origins: a bad env value must not widen the policy. */
+function origins(list: string[] | undefined): string {
+  const kept: string[] = [];
+  for (const value of list ?? []) {
+    try {
+      const url = new URL(value);
+      if (url.protocol === "https:" && url.origin !== "null") kept.push(url.origin);
+    } catch {
+      // Not a URL; dropped.
+    }
+  }
+  return kept.length > 0 ? ` ${kept.join(" ")}` : "";
+}
+
+export function contentSecurityPolicy(
+  nonce: string,
+  isDev: boolean,
+  extra: CspOrigins = {}
+): string {
   return [
     "default-src 'self'",
 
@@ -32,9 +64,9 @@ export function contentSecurityPolicy(nonce: string, isDev: boolean): string {
      * execute, which is why the script-src above is the half that matters.
      */
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${origins(extra.imageOrigins)}`,
     "font-src 'self' data:",
-    `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+    `connect-src 'self'${isDev ? " ws: wss:" : ""}${origins(extra.connectOrigins)}`,
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
