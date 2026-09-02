@@ -322,6 +322,13 @@ export const en = {
     storageDriveHint:
       "Originals at full quality, in a folder in your own Google Drive. Needs the connection below. If Drive is chosen and not answering, uploads pause until it is.",
     storageSwitchNote: "Changing this only affects photos added from then on.",
+    storageConfirmTitle: "Change where photos are stored?",
+    storageConfirmToSite:
+      "New photos will be kept as web copies on this site only. Their originals will not be saved anywhere.",
+    storageConfirmToDrive:
+      "New photos' originals will go to Google Drive. If Drive isn't connected, or stops answering, uploads pause until it is.",
+    storageConfirmButton: "Change storage",
+    storageConfirmCancel: "Cancel",
     wallMode: "Photo wall",
     wallModeAuto: "Open automatically on the event date",
     wallModeAutoHint:
@@ -812,6 +819,13 @@ export const es: Dictionary = {
     storageDriveHint:
       "Originales a plena calidad, en una carpeta de su propio Google Drive. Necesita la conexión de abajo. Si Drive está elegido y no responde, las subidas se pausan hasta que responda.",
     storageSwitchNote: "Cambiar esto solo afecta a las fotos que se suban a partir de entonces.",
+    storageConfirmTitle: "¿Cambiar dónde se guardan las fotos?",
+    storageConfirmToSite:
+      "Las fotos nuevas se guardarán solo como copias web en este sitio. Sus originales no se guardarán en ningún lado.",
+    storageConfirmToDrive:
+      "Los originales de las fotos nuevas irán a Google Drive. Si Drive no está conectado, o deja de responder, las subidas se pausan hasta que lo esté.",
+    storageConfirmButton: "Cambiar almacenamiento",
+    storageConfirmCancel: "Cancelar",
     wallMode: "Muro de fotos",
     wallModeAuto: "Abrir automáticamente el día del evento",
     wallModeAutoHint:

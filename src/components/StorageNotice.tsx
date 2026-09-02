@@ -60,14 +60,18 @@ export function DrivePauseNotice({
   connection,
   t,
   locale,
-  /** Offer the ways out here, rather than a link to where they are. */
-  withActions = false,
+  /**
+   * Offer the ways out here rather than a link to them. The value is the id
+   * of a form posting to /api/google/check that the caller renders outside
+   * any other form, since this notice may itself sit inside one.
+   */
+  checkFormId,
 }: {
   paused: PauseReason | null;
   connection: DriveConnection | null;
   t: Dictionary;
   locale: string;
-  withActions?: boolean;
+  checkFormId?: string;
 }) {
   if (!paused || paused === "storage-full") return null;
 
@@ -94,14 +98,12 @@ export function DrivePauseNotice({
           {fill(t.photos.driveLastError, { message: connection.failureMessage })}
         </p>
       ) : null}
-      {withActions ? (
+      {checkFormId ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {paused === "drive-failing" ? (
-            <form method="post" action="/api/google/check">
-              <Button type="submit" variant="secondary" size="sm">
-                {t.settings.driveCheck}
-              </Button>
-            </form>
+            <Button type="submit" form={checkFormId} variant="secondary" size="sm">
+              {t.settings.driveCheck}
+            </Button>
           ) : null}
           <AnchorButton href="/api/google/start" variant="secondary" size="sm">
             {paused === "drive-unconnected" ? t.settings.driveConnect : t.settings.driveReconnect}
