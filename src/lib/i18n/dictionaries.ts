@@ -322,7 +322,8 @@ export const en = {
     wallModeOpenHint: "For a test run, or to start early.",
     wallCloses: "Closes to new photos",
     wallClosesHint:
-      "Preset to a week after the event; change it if you like. Uploads stop at this moment and what was added stays viewable. Clear it to go back to the preset.",
+      "Preset to a week after the event; change it if you like. Uploads stop at this moment and what was added stays viewable.",
+    wallClosesReset: "Back to a week after the event",
     driveTitle: "Google Drive",
     driveIntro:
       "Originals are saved at full quality to a folder in your own Google Drive. Connect once with your Google account; the site can only ever reach the folder it creates.",
@@ -778,7 +779,8 @@ export const es: Dictionary = {
     wallModeOpenHint: "Para hacer una prueba o empezar antes.",
     wallCloses: "Se cierra a fotos nuevas",
     wallClosesHint:
-      "Viene fijado una semana después del evento; cámbienlo si quieren. En ese momento dejan de aceptarse fotos y las que hay siguen visibles. Bórrenlo para volver al valor fijado.",
+      "Viene fijado una semana después del evento; cámbienlo si quieren. En ese momento dejan de aceptarse fotos y las que hay siguen visibles.",
+    wallClosesReset: "Volver a una semana después del evento",
     driveTitle: "Google Drive",
     driveIntro:
       "Los originales se guardan a plena calidad en una carpeta de su propio Google Drive. Conéctenlo una vez con su cuenta de Google; el sitio solo puede acceder a la carpeta que él mismo crea.",

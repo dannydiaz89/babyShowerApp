@@ -337,6 +337,12 @@ export function SettingsForm({
   );
   const [nextKey, setNextKey] = useState(1000);
   const [deadline, setDeadline] = useState(settings.rsvpDeadlineISO);
+  /*
+   * The closing-time field keeps its own date and time state, so "back to
+   * the preset" remounts it with the preset as its starting value rather
+   * than reaching into the two halves.
+   */
+  const [closesKey, setClosesKey] = useState(0);
 
   // Dates and times are rendered with an explicit locale so the server and the
   // browser format them identically.
@@ -821,17 +827,32 @@ export function SettingsForm({
 
             <div className="border-t border-border pt-5">
               <DateTimeField
+                key={closesKey}
                 id="settings-photo-closes"
                 name="photoWallClosesISO"
                 legend={t.settings.wallCloses}
-                value={settings.photoWallClosesISO || drive.defaultCloses}
+                value={closesKey === 0 ? settings.photoWallClosesISO || drive.defaultCloses : drive.defaultCloses}
                 locale={intlLocale}
                 dateLabels={dateLabels}
                 timeLabels={timeLabels}
                 dateFieldLabel={t.settings.dateInput}
                 timeFieldLabel={t.settings.timeInput}
               />
-              <Hint>{t.settings.wallClosesHint}</Hint>
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <Hint className="mt-0">{t.settings.wallClosesHint}</Hint>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  onClick={() => {
+                    setClosesKey((k) => k + 1);
+                    setDirty(true);
+                  }}
+                  className="shrink-0 px-0"
+                >
+                  {t.settings.wallClosesReset}
+                </Button>
+              </div>
             </div>
           </Panel>
 
