@@ -294,6 +294,8 @@ export type DrivePanel = {
   notice: { ok: boolean; text: string } | null;
   /** The event date, formatted, for the auto-open hint. */
   eventDate: string;
+  /** The preset closing time, a week after the event, shown when nothing is set. */
+  defaultCloses: string;
 };
 
 export function SettingsForm({
@@ -822,7 +824,7 @@ export function SettingsForm({
                 id="settings-photo-closes"
                 name="photoWallClosesISO"
                 legend={t.settings.wallCloses}
-                value={settings.photoWallClosesISO}
+                value={settings.photoWallClosesISO || drive.defaultCloses}
                 locale={intlLocale}
                 dateLabels={dateLabels}
                 timeLabels={timeLabels}

@@ -6,8 +6,10 @@ import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
 import { hashPassword } from "@/lib/password";
+import { getSettings } from "@/lib/settings";
 import { fill, getTranslation } from "@/lib/i18n";
 import { checkMealOptions } from "@/lib/meals";
+import { defaultClosesISO } from "@/lib/photo-wall";
 import {
   SETTINGS_TABS,
   type SettingsState,
@@ -78,7 +80,7 @@ function readMealOptions(form: FormData): Localized[] {
 }
 
 /** Only the fields the given tab owns. Everything else keeps its stored value. */
-function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
+function fieldsForTab(tab: SettingsTab, form: FormData, stored: Settings): Partial<Settings> {
   switch (tab) {
     case "event":
       return {
@@ -112,13 +114,20 @@ function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
     case "photos": {
       const mode = str(form, "photoWall");
       const closes = str(form, "photoWallClosesISO");
+      /*
+       * The field comes pre-filled with the preset, a week after the event.
+       * Saving that unchanged stores blank, so the closing time keeps
+       * following the event date if the hosts move it. Anything else the
+       * hosts typed is kept as it is; anything unreadable is dropped rather
+       * than stored and silently never matching.
+       */
+      const wellFormed = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(closes);
+      const preset = defaultClosesISO(stored.startISO, stored.endISO);
       return {
         photoWall: (PHOTO_WALL_MODES as readonly string[]).includes(mode)
           ? (mode as PhotoWallMode)
           : "auto",
-        // Blank keeps the wall open. Anything not a whole local datetime is
-        // dropped rather than stored and silently never matching.
-        photoWallClosesISO: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(closes) ? closes : "",
+        photoWallClosesISO: wellFormed && closes !== preset ? closes : "",
       };
     }
     case "access":
@@ -132,7 +141,7 @@ export async function saveSettings(
   formData: FormData
 ): Promise<SettingsState> {
   await assertAdmin();
-  const { t } = await getTranslation();
+  const [{ t }, stored] = await Promise.all([getTranslation(), getSettings()]);
 
   const tab = String(formData.get("tab") ?? "") as SettingsTab;
   if (!SETTINGS_TABS.includes(tab)) {
@@ -180,7 +189,7 @@ export async function saveSettings(
     if (tab !== "access") {
       await client.mutation(api.settings.update, {
         key,
-        fields: fieldsForTab(tab, formData),
+        fields: fieldsForTab(tab, formData, stored),
         defaults: DEFAULT_SETTINGS,
       });
     }

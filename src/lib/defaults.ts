@@ -45,7 +45,11 @@ export type Settings = {
   allowKids: boolean;
   collectPhone: boolean;
   photoWall: PhotoWallMode;
-  /** Local datetime, "YYYY-MM-DDTHH:mm", after which uploads stop. Blank: never. */
+  /**
+   * Local datetime, "YYYY-MM-DDTHH:mm", after which uploads stop. Blank means
+   * the preset — a week after the event — which then follows the event date
+   * if that changes. See src/lib/photo-wall.ts.
+   */
   photoWallClosesISO: string;
 };
 

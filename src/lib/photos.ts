@@ -71,6 +71,7 @@ export async function wallState(): Promise<WallState> {
     {
       mode: settings.photoWall,
       startISO: settings.startISO,
+      endISO: settings.endISO,
       closesISO: settings.photoWallClosesISO,
     },
     new Date()

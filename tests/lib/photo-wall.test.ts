@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   closesAtISO,
+  defaultClosesISO,
+  effectiveClosesISO,
   eventDateISO,
   localDateISO,
   localDateTimeISO,
@@ -18,8 +20,10 @@ import {
 const LA = "America/Los_Angeles";
 const START = "2026-10-18T14:00";
 
-function wall(mode: "auto" | "open", closesISO = "") {
-  return { mode, startISO: START, closesISO };
+const END = "2026-10-18T17:00";
+
+function wall(mode: "auto" | "open", closesISO = "", endISO = END) {
+  return { mode, startISO: START, endISO, closesISO };
 }
 
 describe("eventDateISO", () => {
@@ -50,6 +54,36 @@ describe("closesAtISO", () => {
   });
 });
 
+describe("defaultClosesISO", () => {
+  it("is a week after the event ends, at the same time of day", () => {
+    expect(defaultClosesISO(START, END)).toBe("2026-10-25T17:00");
+  });
+
+  it("counts from the start when no end is set", () => {
+    expect(defaultClosesISO(START, "")).toBe("2026-10-25T14:00");
+  });
+
+  it("rolls over a month end and a year end by the calendar", () => {
+    expect(defaultClosesISO("2026-10-28T14:00", "")).toBe("2026-11-04T14:00");
+    expect(defaultClosesISO("2026-12-28T20:00", "")).toBe("2027-01-04T20:00");
+  });
+
+  it("is blank when the event has no readable date", () => {
+    expect(defaultClosesISO("someday", "")).toBe("");
+  });
+});
+
+describe("effectiveClosesISO", () => {
+  it("prefers what the hosts set", () => {
+    expect(effectiveClosesISO(wall("auto", "2026-10-20T09:00"))).toBe("2026-10-20T09:00");
+  });
+
+  it("falls back to the preset when nothing, or nothing readable, is set", () => {
+    expect(effectiveClosesISO(wall("auto"))).toBe("2026-10-25T17:00");
+    expect(effectiveClosesISO(wall("auto", "tonight"))).toBe("2026-10-25T17:00");
+  });
+});
+
 describe("local time", () => {
   it("reports the calendar date where the event is, not in UTC", () => {
     // 05:30 UTC on the 18th is still the evening of the 17th in Los Angeles.
@@ -75,14 +109,23 @@ describe("photoWallState in auto mode", () => {
     expect(state).toEqual({ visible: true, uploads: true });
   });
 
-  it("stays open after the event when no close is set, so photos keep coming in", () => {
-    const state = photoWallState(wall("auto"), new Date("2026-11-30T12:00:00Z"), LA);
+  it("keeps taking photos in the week after the event when nothing is set", () => {
+    // Three days on: the preset close is a week after the end.
+    const state = photoWallState(wall("auto"), new Date("2026-10-21T12:00:00Z"), LA);
     expect(state).toEqual({ visible: true, uploads: true });
+  });
+
+  it("closes to new photos a week after the event ends, and stays viewable", () => {
+    // 2026-10-25T17:00 PDT is 00:00 UTC on the 26th.
+    const before = photoWallState(wall("auto"), new Date("2026-10-25T23:59:00Z"), LA);
+    const after = photoWallState(wall("auto"), new Date("2026-10-26T00:00:00Z"), LA);
+    expect(before).toEqual({ visible: true, uploads: true });
+    expect(after).toEqual({ visible: true, uploads: false });
   });
 
   it("cannot open on an unreadable start date", () => {
     const state = photoWallState(
-      { mode: "auto", startISO: "whenever", closesISO: "" },
+      { mode: "auto", startISO: "whenever", endISO: "", closesISO: "" },
       new Date("2030-01-01T00:00:00Z"),
       LA
     );
@@ -116,11 +159,22 @@ describe("photoWallState closing", () => {
     expect(state).toEqual({ visible: true, uploads: false });
   });
 
-  it("never closes on a blank or unreadable time", () => {
+  it("uses the preset when the set time is blank or unreadable", () => {
     for (const bad of ["", "tonight", "2026-10-19"]) {
-      const state = photoWallState(wall("open", bad), new Date("2030-01-01T00:00:00Z"), LA);
-      expect(state).toEqual({ visible: true, uploads: true });
+      const during = photoWallState(wall("open", bad), new Date("2026-10-20T00:00:00Z"), LA);
+      const later = photoWallState(wall("open", bad), new Date("2030-01-01T00:00:00Z"), LA);
+      expect(during).toEqual({ visible: true, uploads: true });
+      expect(later).toEqual({ visible: true, uploads: false });
     }
+  });
+
+  it("never closes when the event itself has no readable date to count from", () => {
+    const state = photoWallState(
+      { mode: "open", startISO: "", endISO: "", closesISO: "" },
+      new Date("2030-01-01T00:00:00Z"),
+      LA
+    );
+    expect(state).toEqual({ visible: true, uploads: true });
   });
 
   it("a close set before the event date leaves the wall never open for uploads", () => {
@@ -134,7 +188,7 @@ describe("photoWallState closing", () => {
 });
 
 describe("photoWallState open mode", () => {
-  it("open means open now, whatever the date", () => {
+  it("open means open now, however early", () => {
     const state = photoWallState(wall("open"), new Date("2020-01-01T00:00:00Z"), LA);
     expect(state).toEqual({ visible: true, uploads: true });
   });

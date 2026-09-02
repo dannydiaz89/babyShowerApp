@@ -22,9 +22,14 @@ export type WallSettings = {
   mode: PhotoWallMode;
   /** The event's start, "YYYY-MM-DDTHH:mm" local. Its date is what opens the wall. */
   startISO: string;
-  /** When uploads stop, "YYYY-MM-DDTHH:mm" local. Blank means never. */
+  /** The event's end, same shape; may be blank. The preset closing time counts from it. */
+  endISO: string;
+  /** When uploads stop, "YYYY-MM-DDTHH:mm" local. Blank means the preset: a week after the event. */
   closesISO: string;
 };
+
+/** How long after the event the wall keeps taking photos unless the hosts say otherwise. */
+export const DEFAULT_CLOSE_AFTER_DAYS = 7;
 
 export type WallState = {
   /** Show the Photos tab and the wall. */
@@ -45,6 +50,33 @@ export function eventDateISO(startISO: string): string | null {
 export function closesAtISO(closesISO: string): string | null {
   const match = LOCAL_DATETIME.exec(closesISO.trim());
   return match ? `${match[1]}T${match[2]}` : null;
+}
+
+/**
+ * The preset closing time: a week after the event ends (or starts, when no
+ * end is set), at the same time of day. Blank when neither is readable.
+ *
+ * Plain calendar arithmetic on the parts, not a Date in the server's time
+ * zone: the value is a local wall-clock moment, and a week later is the
+ * same clock time seven days on whatever the offset does in between.
+ */
+export function defaultClosesISO(startISO: string, endISO: string): string {
+  const base = closesAtISO(endISO) ?? closesAtISO(startISO);
+  if (!base) return "";
+  const [date, time] = base.split("T");
+  const [y, m, d] = date.split("-").map(Number);
+  const later = new Date(Date.UTC(y, m - 1, d + DEFAULT_CLOSE_AFTER_DAYS));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${later.getUTCFullYear()}-${pad(later.getUTCMonth() + 1)}-${pad(later.getUTCDate())}T${time}`;
+}
+
+/** The closing time in force: what the hosts set, or the preset when they set nothing. */
+export function effectiveClosesISO({
+  startISO,
+  endISO,
+  closesISO,
+}: Pick<WallSettings, "startISO" | "endISO" | "closesISO">): string {
+  return closesAtISO(closesISO) ?? defaultClosesISO(startISO, endISO);
 }
 
 function parts(now: Date, timeZone: string): Record<string, string> {
@@ -74,17 +106,19 @@ export function localDateTimeISO(now: Date, timeZone: string): string {
 }
 
 export function photoWallState(
-  { mode, startISO, closesISO }: WallSettings,
+  settings: WallSettings,
   now: Date,
   timeZone: string = EVENT_TIME_ZONE
 ): WallState {
+  const { mode, startISO } = settings;
   /*
-   * Closing is a moment, not a mode: the hosts set it once and the wall
-   * looks after itself on the night. After it, uploads stop but the wall
-   * stays viewable — photos are the point of it, and they are still there.
-   * A blank or unreadable value never closes anything.
+   * Closing is a moment, not a mode: the hosts set it once — or leave the
+   * preset, a week after the event — and the wall looks after itself. After
+   * it, uploads stop but the wall stays viewable: photos are the point of
+   * it, and they are still there. Only an unreadable event date leaves no
+   * closing time at all, and then nothing closes.
    */
-  const closesAt = closesAtISO(closesISO);
+  const closesAt = closesAtISO(effectiveClosesISO(settings));
   const closed = closesAt !== null && localDateTimeISO(now, timeZone) >= closesAt;
 
   switch (mode) {

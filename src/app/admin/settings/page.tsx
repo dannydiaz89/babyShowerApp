@@ -3,6 +3,7 @@ import { PageTitle } from "@/components/ui";
 import { AdminHeader } from "@/components/SiteHeader";
 import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
 import { fill, formatDateShort, getTranslation } from "@/lib/i18n";
+import { defaultClosesISO } from "@/lib/photo-wall";
 import { getSettings } from "@/lib/settings";
 import { SETTINGS_TABS, type SettingsTab } from "@/lib/settings-tabs";
 
@@ -53,6 +54,7 @@ export default async function SettingsPage({
     connection,
     notice: params.drive ? (notices[params.drive] ?? null) : null,
     eventDate: formatDateShort(settings.startISO, locale),
+    defaultCloses: defaultClosesISO(settings.startISO, settings.endISO),
   };
 
   return (

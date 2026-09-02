@@ -64,9 +64,9 @@ works; photos are kept at web size only, and Settings says so.
 **When it opens and closes.** By default the wall opens at midnight on the
 event date, in `America/Los_Angeles` (`EVENT_TIME_ZONE` in
 `src/lib/photo-wall.ts`). Settings → Photos can open it now, for a test run,
-and holds an optional closing date and time — set once, and on that moment
-uploads stop while what was added stays viewable. Blank means it never
-closes.
+and holds the closing date and time, preset to a week after the event. On
+that moment uploads stop while what was added stays viewable. Change it if
+you like; left as the preset it follows the event date if that moves.
 
 The design and the decisions behind it are in
 [docs/photo-wall.md](docs/photo-wall.md).

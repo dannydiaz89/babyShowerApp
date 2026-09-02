@@ -20,9 +20,9 @@ https://claude.ai/code/artifact/66157bd8-ca15-4d5e-9a2f-7f789df68fe3
   phone, JPEG when the browser cannot encode WebP. Kept behind one seam so S3
   or similar can replace it later.
 - **Banner and tab appear automatically on the event date** and stay on.
-  A host setting can open the wall early. Closing is a date and time set
-  once in Settings, not a switch: at that moment uploads stop and the
-  gallery stays viewable. Blank never closes.
+  A host setting can open the wall early. Closing is a date and time, not a
+  switch: preset to a week after the event and editable in Settings. At
+  that moment uploads stop and the gallery stays viewable.
 - **Identity is a 30-day device cookie**, matched to the guest session. A
   photo remembers the device that uploaded it; "your photos" means "from this
   phone". Never sent to the browser as data — the server answers `mine: true`.
