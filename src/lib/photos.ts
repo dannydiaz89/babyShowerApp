@@ -67,7 +67,14 @@ export async function photoCaller(): Promise<Caller> {
 /** Whether the wall is showing and taking uploads, from the hosts' settings and today's date. */
 export async function wallState(): Promise<WallState> {
   const settings = await getSettings();
-  return photoWallState(settings.photoWall, settings.startISO, new Date());
+  return photoWallState(
+    {
+      mode: settings.photoWall,
+      startISO: settings.startISO,
+      closesISO: settings.photoWallClosesISO,
+    },
+    new Date()
+  );
 }
 
 /* -------------------------------------------------------------- reading */

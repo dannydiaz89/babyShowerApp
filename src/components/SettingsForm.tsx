@@ -369,7 +369,6 @@ export function SettingsForm({
   const wallModeLabels = {
     auto: [t.settings.wallModeAuto, fill(t.settings.wallModeAutoHint, { date: drive.eventDate })],
     open: [t.settings.wallModeOpen, t.settings.wallModeOpenHint],
-    closed: [t.settings.wallModeClosed, t.settings.wallModeClosedHint],
   } as const;
 
   // A save that succeeded means this tab is clean again.
@@ -817,6 +816,21 @@ export function SettingsForm({
                 ))}
               </div>
             </fieldset>
+
+            <div className="border-t border-border pt-5">
+              <DateTimeField
+                id="settings-photo-closes"
+                name="photoWallClosesISO"
+                legend={t.settings.wallCloses}
+                value={settings.photoWallClosesISO}
+                locale={intlLocale}
+                dateLabels={dateLabels}
+                timeLabels={timeLabels}
+                dateFieldLabel={t.settings.dateInput}
+                timeFieldLabel={t.settings.timeInput}
+              />
+              <Hint>{t.settings.wallClosesHint}</Hint>
+            </div>
           </Panel>
 
           {/*

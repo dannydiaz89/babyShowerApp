@@ -15,11 +15,11 @@ export type Registry = {
 };
 
 /**
- * When guests may add photos. "auto" opens the wall on the event date and
- * leaves it open; "open" opens it now; "closed" stops uploads but keeps what
- * was added viewable. See src/lib/photo-wall.ts for the rule.
+ * When guests may add photos. "auto" opens the wall on the event date;
+ * "open" opens it now. Closing is a moment, not a mode — see
+ * `photoWallClosesISO` and src/lib/photo-wall.ts for the rule.
  */
-export const PHOTO_WALL_MODES = ["auto", "open", "closed"] as const;
+export const PHOTO_WALL_MODES = ["auto", "open"] as const;
 export type PhotoWallMode = (typeof PHOTO_WALL_MODES)[number];
 
 export type Settings = {
@@ -45,6 +45,8 @@ export type Settings = {
   allowKids: boolean;
   collectPhone: boolean;
   photoWall: PhotoWallMode;
+  /** Local datetime, "YYYY-MM-DDTHH:mm", after which uploads stop. Blank: never. */
+  photoWallClosesISO: string;
 };
 
 /** Swatches offered for registry cards. Fixed so Tailwind can see the classes. */
@@ -113,4 +115,5 @@ export const DEFAULT_SETTINGS: Settings = {
   allowKids: true,
   collectPhone: true,
   photoWall: "auto",
+  photoWallClosesISO: "",
 };

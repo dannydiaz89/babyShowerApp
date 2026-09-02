@@ -59,6 +59,13 @@ export const getSettings = cache(async (): Promise<StoredSettings> => {
         value === undefined ? DEFAULT_SETTINGS[key] : value;
     }
 
+    /*
+     * "closed" was a manual photo-wall switch, retired in favour of a closing
+     * time. A row that still holds it reads as the default, never closing;
+     * the next save from the Photos tab writes the current shape.
+     */
+    if ((row.photoWall as string) === "closed") settings.photoWall = "auto";
+
     return {
       ...settings,
       guestPasswordHash: row.guestPasswordHash,

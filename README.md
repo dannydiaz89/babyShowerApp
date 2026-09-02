@@ -61,10 +61,12 @@ which could not take them anyway. Connect the Drive once from Settings →
 Photos (see [Google Drive](#google-drive) below). Without it the wall still
 works; photos are kept at web size only, and Settings says so.
 
-**When it opens.** By default the wall opens at midnight on the event date,
-in `America/Los_Angeles` (`EVENT_TIME_ZONE` in `src/lib/photo-wall.ts`), and
-stays open. Settings → Photos can open it now, for a test run, or close it to
-new photos while keeping what was added viewable.
+**When it opens and closes.** By default the wall opens at midnight on the
+event date, in `America/Los_Angeles` (`EVENT_TIME_ZONE` in
+`src/lib/photo-wall.ts`). Settings → Photos can open it now, for a test run,
+and holds an optional closing date and time — set once, and on that moment
+uploads stop while what was added stays viewable. Blank means it never
+closes.
 
 The design and the decisions behind it are in
 [docs/photo-wall.md](docs/photo-wall.md).

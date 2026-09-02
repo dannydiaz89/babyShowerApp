@@ -111,10 +111,14 @@ function fieldsForTab(tab: SettingsTab, form: FormData): Partial<Settings> {
       };
     case "photos": {
       const mode = str(form, "photoWall");
+      const closes = str(form, "photoWallClosesISO");
       return {
         photoWall: (PHOTO_WALL_MODES as readonly string[]).includes(mode)
           ? (mode as PhotoWallMode)
           : "auto",
+        // Blank keeps the wall open. Anything not a whole local datetime is
+        // dropped rather than stored and silently never matching.
+        photoWallClosesISO: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(closes) ? closes : "",
       };
     }
     case "access":

@@ -317,11 +317,12 @@ export const en = {
     wallMode: "Photo wall",
     wallModeAuto: "Open automatically on the event date",
     wallModeAutoHint:
-      "Guests get a Photos tab and a banner on the invitation from midnight on {date}, and it stays open afterwards.",
+      "Guests get a Photos tab and a banner on the invitation from midnight on {date}.",
     wallModeOpen: "Open now",
     wallModeOpenHint: "For a test run, or to start early.",
-    wallModeClosed: "Closed to new photos",
-    wallModeClosedHint: "Uploads stop. What was added stays viewable.",
+    wallCloses: "Closes to new photos",
+    wallClosesHint:
+      "Set it once and forget it: uploads stop at this moment and what was added stays viewable. Leave blank to keep the wall open.",
     driveTitle: "Google Drive",
     driveIntro:
       "Originals are saved at full quality to a folder in your own Google Drive. Connect once with your Google account; the site can only ever reach the folder it creates.",
@@ -772,11 +773,12 @@ export const es: Dictionary = {
     wallMode: "Muro de fotos",
     wallModeAuto: "Abrir automáticamente el día del evento",
     wallModeAutoHint:
-      "Los invitados ven la pestaña Fotos y un aviso en la invitación desde la medianoche del {date}, y queda abierto después.",
+      "Los invitados ven la pestaña Fotos y un aviso en la invitación desde la medianoche del {date}.",
     wallModeOpen: "Abrir ahora",
     wallModeOpenHint: "Para hacer una prueba o empezar antes.",
-    wallModeClosed: "Cerrado a fotos nuevas",
-    wallModeClosedHint: "Ya no se pueden subir fotos. Las que hay siguen visibles.",
+    wallCloses: "Se cierra a fotos nuevas",
+    wallClosesHint:
+      "Configúrenlo una vez y olvídenlo: en ese momento dejan de aceptarse fotos y las que hay siguen visibles. Déjenlo en blanco para que el muro siga abierto.",
     driveTitle: "Google Drive",
     driveIntro:
       "Los originales se guardan a plena calidad en una carpeta de su propio Google Drive. Conéctenlo una vez con su cuenta de Google; el sitio solo puede acceder a la carpeta que él mismo crea.",

@@ -105,14 +105,21 @@ export default defineSchema({
     guestSessionEpoch: v.optional(v.number()),
 
     /*
-     * When guests may add photos. "auto" opens the wall on the event date and
-     * leaves it open; "open" opens it now, for a test run; "closed" stops
-     * uploads but keeps what was added viewable. Optional: rows written
-     * before the photo wall existed read as "auto".
+     * When guests may add photos. "auto" opens the wall on the event date;
+     * "open" opens it now, for a test run. Either way it stays open until
+     * `photoWallClosesISO`, a local "YYYY-MM-DDTHH:mm" like `startISO`, or
+     * for ever when that is blank. Set once and forgotten, rather than a
+     * switch someone has to remember on the night. Both optional: rows
+     * written before the photo wall existed read as "auto", never closing.
+     *
+     * "closed" is retired — it was a manual switch before the closing time
+     * existed — and stays accepted so a row that still holds it validates.
+     * src/lib/settings.ts reads it as "auto" with no closing time.
      */
     photoWall: v.optional(
       v.union(v.literal("auto"), v.literal("open"), v.literal("closed"))
     ),
+    photoWallClosesISO: v.optional(v.string()),
 
     updatedAt: v.number(),
   }).index("by_singleton", ["singleton"]),

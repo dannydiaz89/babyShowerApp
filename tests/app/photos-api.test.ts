@@ -70,7 +70,14 @@ const OTHER = "ffffffffffffffffffffffffffffffff";
 const BASE = "http://localhost:3001";
 
 function open(mode: "auto" | "open" | "closed") {
-  return { ...DEFAULT_SETTINGS, photoWall: mode, isConfigured: true, available: true };
+  // "closed" is an open wall whose closing time has passed.
+  return {
+    ...DEFAULT_SETTINGS,
+    photoWall: mode === "closed" ? "open" : mode,
+    photoWallClosesISO: mode === "closed" ? "2000-01-01T00:00" : "",
+    isConfigured: true,
+    available: true,
+  };
 }
 
 function json(path: string, body: unknown): Request {
