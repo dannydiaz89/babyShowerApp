@@ -1,6 +1,6 @@
 import { AdminHeader } from "@/components/SiteHeader";
 import { PhotoWall } from "@/components/PhotoWall";
-import { StorageNotice } from "@/components/StorageNotice";
+import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import { Alert, ButtonLink, PageTitle } from "@/components/ui";
 import { getDriveConnection, googleConfigured } from "@/lib/google-drive";
 import { fill, getTranslation } from "@/lib/i18n";
@@ -76,14 +76,9 @@ export default async function AdminPhotosPage({
             {fill(t.photos.stats, { live: totals.live, hidden: totals.hidden })}
           </p>
 
-          <div className="mt-4 max-w-xl">
-            <StorageNotice
-              status={status}
-              paused={wall.paused}
-              connection={connection}
-              t={t}
-              locale={locale}
-            />
+          <div className="mt-4 max-w-xl space-y-3">
+            <DrivePauseNotice paused={wall.paused} connection={connection} t={t} locale={locale} />
+            <StorageMeter status={status} paused={wall.paused} t={t} />
           </div>
 
           <nav aria-label={t.photos.filterLabel} className="mt-5 flex flex-wrap gap-2">

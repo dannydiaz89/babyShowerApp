@@ -4,7 +4,7 @@ import { useActionState, useCallback, useEffect, useId, useRef, useState } from 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
-import { StorageNotice } from "@/components/StorageNotice";
+import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import type { DriveConnection } from "@/lib/google-drive";
 import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
 import {
@@ -838,6 +838,9 @@ export function SettingsForm({
                 ))}
               </div>
               <Hint>{t.settings.storageSwitchNote}</Hint>
+              <div className="mt-4 max-w-md">
+                <StorageMeter status={drive.status} paused={drive.paused} t={t} />
+              </div>
             </fieldset>
 
             <fieldset className="border-t border-border pt-5">
@@ -913,8 +916,7 @@ export function SettingsForm({
               </Alert>
             ) : null}
 
-            <StorageNotice
-              status={drive.status}
+            <DrivePauseNotice
               paused={drive.paused}
               connection={drive.connection}
               t={t}

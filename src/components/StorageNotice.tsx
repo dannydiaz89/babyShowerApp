@@ -5,10 +5,11 @@ import type { DriveConnection } from "@/lib/google-drive";
 import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
 
 /**
- * What the hosts need to know about the storage behind the wall, in one
- * place: the meter for the site's storage, and the reason uploads are
- * paused when they are, with the ways out. Shown on the Photos settings
- * tab and the host photo page; the dashboard carries a one-line pointer.
+ * What the hosts need to know about the storage behind the wall, in two
+ * pieces that belong in two places: the meter for the site's own storage,
+ * which sits with the "this site" choice, and the Drive pause notice, which
+ * sits with the Drive connection. Keeping them apart is the point — a meter
+ * inside the Drive card reads as a Drive quota, and it is not one.
  */
 
 export function formatBytes(bytes: number): string {
@@ -20,8 +21,41 @@ export function formatBytes(bytes: number): string {
 
 const WARN_AT = 0.8;
 
-export function StorageNotice({
+/** The site's storage: how full it is, and a warning or a stop when that matters. */
+export function StorageMeter({
   status,
+  paused,
+  t,
+}: {
+  status: StorageStatus;
+  paused: PauseReason | null;
+  t: Dictionary;
+}) {
+  const ratio = status.cap > 0 ? status.bytes / status.cap : 0;
+  return (
+    <div className="space-y-2">
+      {paused === "storage-full" ? (
+        <Alert tone="critical" role="alert">
+          {t.photos.storageFullHost}
+        </Alert>
+      ) : ratio >= WARN_AT ? (
+        <Alert tone="critical" role="status">
+          {t.photos.storageWarning}
+        </Alert>
+      ) : null}
+      <ProgressBar value={ratio} label={t.settings.storageSite} />
+      <p className="text-xs text-ink-muted tabular-nums">
+        {fill(t.photos.storageMeter, {
+          used: formatBytes(status.bytes),
+          cap: formatBytes(status.cap),
+        })}
+      </p>
+    </div>
+  );
+}
+
+/** Why Drive is holding uploads up, if it is, and the ways out. */
+export function DrivePauseNotice({
   paused,
   connection,
   t,
@@ -29,14 +63,14 @@ export function StorageNotice({
   /** Offer the ways out here, rather than a link to where they are. */
   withActions = false,
 }: {
-  status: StorageStatus;
   paused: PauseReason | null;
   connection: DriveConnection | null;
   t: Dictionary;
   locale: string;
   withActions?: boolean;
 }) {
-  const ratio = status.cap > 0 ? status.bytes / status.cap : 0;
+  if (!paused || paused === "storage-full") return null;
+
   const time = (at: number | null) =>
     at
       ? new Intl.DateTimeFormat(locale === "es" ? "es-MX" : "en-US", {
@@ -45,68 +79,41 @@ export function StorageNotice({
         }).format(new Date(at))
       : "";
 
-  let problem: string | null = null;
-  switch (paused) {
-    case "storage-full":
-      problem = t.photos.storageFullHost;
-      break;
-    case "drive-failing":
-      problem = fill(t.photos.driveFailingHost, { time: time(connection?.failedAt ?? null) });
-      break;
-    case "drive-revoked":
-      problem = fill(t.photos.driveRevokedHost, { time: time(connection?.failedAt ?? null) });
-      break;
-    case "drive-unconnected":
-      problem = t.photos.driveUnconnectedHost;
-      break;
-  }
+  const problem =
+    paused === "drive-failing"
+      ? fill(t.photos.driveFailingHost, { time: time(connection?.failedAt ?? null) })
+      : paused === "drive-revoked"
+        ? fill(t.photos.driveRevokedHost, { time: time(connection?.failedAt ?? null) })
+        : t.photos.driveUnconnectedHost;
 
   return (
-    <div className="space-y-3">
-      {problem ? (
-        <Alert tone="critical" role="alert">
-          <p>{problem}</p>
-          {connection?.failureMessage && paused !== "storage-full" ? (
-            <p className="mt-1 text-xs opacity-80">
-              {fill(t.photos.driveLastError, { message: connection.failureMessage })}
-            </p>
-          ) : null}
-          {withActions && paused && paused !== "storage-full" ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {paused === "drive-failing" ? (
-                <form method="post" action="/api/google/check">
-                  <Button type="submit" variant="secondary" size="sm">
-                    {t.settings.driveCheck}
-                  </Button>
-                </form>
-              ) : null}
-              <AnchorButton href="/api/google/start" variant="secondary" size="sm">
-                {paused === "drive-unconnected" ? t.settings.driveConnect : t.settings.driveReconnect}
-              </AnchorButton>
-            </div>
-          ) : !withActions ? (
-            <p className="mt-2">
-              <a href="/admin/settings?tab=photos" className="underline underline-offset-4">
-                {t.photos.goToSettings}
-              </a>
-            </p>
-          ) : null}
-        </Alert>
-      ) : ratio >= WARN_AT ? (
-        <Alert tone="critical" role="status">
-          {t.photos.storageWarning}
-        </Alert>
-      ) : null}
-
-      <div>
-        <ProgressBar value={ratio} label={t.settings.storageTitle} />
-        <p className="mt-1.5 text-xs text-ink-muted tabular-nums">
-          {fill(t.photos.storageMeter, {
-            used: formatBytes(status.bytes),
-            cap: formatBytes(status.cap),
-          })}
+    <Alert tone="critical" role="alert">
+      <p>{problem}</p>
+      {connection?.failureMessage ? (
+        <p className="mt-1 text-xs opacity-80">
+          {fill(t.photos.driveLastError, { message: connection.failureMessage })}
         </p>
-      </div>
-    </div>
+      ) : null}
+      {withActions ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {paused === "drive-failing" ? (
+            <form method="post" action="/api/google/check">
+              <Button type="submit" variant="secondary" size="sm">
+                {t.settings.driveCheck}
+              </Button>
+            </form>
+          ) : null}
+          <AnchorButton href="/api/google/start" variant="secondary" size="sm">
+            {paused === "drive-unconnected" ? t.settings.driveConnect : t.settings.driveReconnect}
+          </AnchorButton>
+        </div>
+      ) : (
+        <p className="mt-2">
+          <a href="/admin/settings?tab=photos" className="underline underline-offset-4">
+            {t.photos.goToSettings}
+          </a>
+        </p>
+      )}
+    </Alert>
   );
 }

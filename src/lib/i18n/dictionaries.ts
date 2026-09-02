@@ -469,7 +469,7 @@ export const en = {
     noHidden: "Nothing hidden. Guests haven't removed any photos.",
     hostEmpty: "No photos yet.",
 
-    storageMeter: "{used} of {cap} used for web copies",
+    storageMeter: "This site's storage: {used} of {cap} used for web copies.",
     storageWarning: "The site's storage is getting full. Delete photos to make room, or the wall will stop taking photos.",
     storageFullHost: "The site's storage is full. Uploads have stopped until photos are deleted.",
     driveFailingHost:
@@ -959,7 +959,7 @@ export const es: Dictionary = {
     noHidden: "No hay fotos ocultas. Ningún invitado ha quitado fotos.",
     hostEmpty: "Aún no hay fotos.",
 
-    storageMeter: "{used} de {cap} usados en copias web",
+    storageMeter: "Almacenamiento de este sitio: {used} de {cap} usados en copias web.",
     storageWarning: "El almacenamiento del sitio se está llenando. Borren fotos para hacer espacio, o el muro dejará de aceptar fotos.",
     storageFullHost: "El almacenamiento del sitio está lleno. Las subidas se detuvieron hasta que se borren fotos.",
     driveFailingHost:
