@@ -6,41 +6,42 @@
    Components in src/components/ui/ are the only place tokens become styles;
    pages compose those components and never reach for raw values.
 
-   Theme: "Over the Moon" — powder blue, white, and gold, drawn from the
-   decor photo. Every text pair below was checked against WCAG AA (4.5:1),
-   not estimated. See scripts/check-contrast.mjs.
+   Theme: "Over the Moon" — periwinkle, white, and gold, drawn from the
+   printed invitation: the watercolour wash around the moon, the violet of
+   the script, the gold of the stars. Every text pair below was checked
+   against WCAG AA (4.5:1), not estimated. See scripts/check-contrast.mjs.
    ============================================================================ */
 @theme {
   /* --- Surfaces ---------------------------------------------------------- */
-  --color-canvas: #f2f6fa;
+  --color-canvas: #f4f5fb;
   --color-surface: #ffffff;
-  --color-surface-sunken: #e6eef6;
+  --color-surface-sunken: #e9ebf7;
 
   /* --- Lines ------------------------------------------------------------- */
   /* Hairlines between content. Decorative; carries no meaning on its own. */
-  --color-border: #d7e2ec;
+  --color-border: #dcdff0;
   /* The boundary of a form field. This one IS the only thing marking where
      an input begins, so it clears the 3:1 WCAG 1.4.11 floor for UI
      component boundaries. Deliberately darker than --color-border. */
-  --color-border-field: #8197ac;
+  --color-border-field: #8b8fb5;
   /* Hover emphasis on an already-visible edge. */
-  --color-border-strong: #93aec9;
+  --color-border-strong: #a3a8cd;
 
   /* --- Text. Every value below clears WCAG AA (4.5:1) on the grounds it
          is actually rendered on. Verified, not assumed. ------------------- */
-  --color-ink: #222b35;
-  --color-ink-muted: #5a6673;
+  --color-ink: #272534;
+  --color-ink-muted: #5c5b74;
   /* Placeholders only. Sits on surface normally and on danger-soft when the
      field is invalid — kept dark enough to clear AA on both. */
-  --color-ink-subtle: #5d6976;
+  --color-ink-subtle: #5f5e77;
 
   /* --- Accent ------------------------------------------------------------ */
-  --color-accent: #3f5f7e;
-  --color-accent-hover: #33506c;
-  --color-accent-soft: #dbe8f4;
-  --color-accent-ink: #3f5f7e;
+  --color-accent: #4d5395;
+  --color-accent-hover: #3f4480;
+  --color-accent-soft: #e3e5f6;
+  --color-accent-ink: #4d5395;
   /* Decorative only — too light for text. Icons, rules, ornament. */
-  --color-accent-line: #8ba6c0;
+  --color-accent-line: #9ba1cf;
 
   /* --- Gold. Ornament and readable text are different values: the gold from
          the photo is lovely as a hairline or a star and far too light to
@@ -78,8 +79,8 @@
   --color-registry-clay: #f5e4db;
   --color-registry-clay-ink: #9c5130;
   --color-registry-amber: #f7edd6;
-  --color-registry-sky: #e2eef2;
-  --color-registry-sky-ink: #2c5867;
+  --color-registry-sky: #e4ecf7;
+  --color-registry-sky-ink: #38537d;
 
   /* --- Radius. Deliberately no fully-rounded step: this design uses soft
          rectangles, not pills. ---------------------------------------------- */
@@ -91,9 +92,9 @@
 
   /* --- Elevation. Shadow is tinted with the ink, so it reads as depth in
          this palette rather than as grey haze. ---------------------------- */
-  --shadow-raised: 0 1px 2px rgba(34, 43, 53, 0.05),
-    0 12px 32px -20px rgba(34, 43, 53, 0.32);
-  --shadow-overlay: 0 24px 60px -20px rgba(34, 43, 53, 0.45);
+  --shadow-raised: 0 1px 2px rgba(39, 37, 52, 0.05),
+    0 12px 32px -20px rgba(39, 37, 52, 0.32);
+  --shadow-overlay: 0 24px 60px -20px rgba(39, 37, 52, 0.45);
 
   /* --- Type -------------------------------------------------------------- */
   --font-display: var(--font-cormorant), Georgia, "Times New Roman", serif;
