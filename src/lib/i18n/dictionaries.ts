@@ -475,7 +475,7 @@ export const en = {
     loadFailed: "Couldn't load more photos. Check your connection and try again.",
 
     bannerTitle: "Took any photos today?",
-    bannerBody: "Add them to the photo wall so everyone can see them. Up to {max} at a time.",
+    bannerBody: "Add them to the photo wall so everyone can see them.",
     bannerCta: "Upload photos",
 
     uploadTitle: "Add photos",
@@ -1075,7 +1075,7 @@ export const es: Dictionary = {
     loadFailed: "No se pudieron cargar más fotos. Revisen su conexión e inténtenlo de nuevo.",
 
     bannerTitle: "¿Tomaron fotos hoy?",
-    bannerBody: "Súbanlas al muro de fotos para que todos las vean. Hasta {max} a la vez.",
+    bannerBody: "Súbanlas al muro de fotos para que todos las vean.",
     bannerCta: "Subir fotos",
 
     uploadTitle: "Subir fotos",

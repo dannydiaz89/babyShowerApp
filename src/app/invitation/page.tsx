@@ -12,7 +12,6 @@ import {
   PhotoIcon,
   SectionTitle,
 } from "@/components/ui";
-import { PHOTO_BATCH_MAX } from "../../../convex/limits";
 import {
   getTranslation,
   fill,
@@ -106,7 +105,7 @@ export default async function InvitationPage() {
           <Callout as="section" icon={<PhotoIcon className="h-6 w-6" />} className="mb-6">
             <h2 className="font-display text-xl text-ink">{t.photos.bannerTitle}</h2>
             <p className="mt-0.5 text-sm text-ink-muted">
-              {fill(t.photos.bannerBody, { max: PHOTO_BATCH_MAX })}
+              {t.photos.bannerBody}
             </p>
             <ButtonLink href="/photos/add" variant="primary" size="sm" className="mt-3">
               {t.photos.bannerCta}
