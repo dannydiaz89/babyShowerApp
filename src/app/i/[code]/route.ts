@@ -50,7 +50,15 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params;
-  const next = safeNext(new URL(request.url).searchParams.get("next"));
+
+  /*
+   * `safeNext` keeps the destination on this site; this keeps it off this
+   * route. A hand-made /i/<code>?next=/i/<code> would otherwise mint a cookie,
+   * land back here, and mint another until the browser gave up — harmless, but
+   * there is no reason for a scan to send anyone to a second scan.
+   */
+  const asked = safeNext(new URL(request.url).searchParams.get("next"));
+  const next = asked === "/i" || asked.startsWith("/i/") ? "/invitation" : asked;
 
   const client = convexClient();
   const key = convexKey();
@@ -62,6 +70,8 @@ export async function GET(
    */
   const send = (response: NextResponse) => {
     response.headers.set("Cache-Control", "no-store");
+    // A code should never end up in an index, however one is found.
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
     return response;
   };
 

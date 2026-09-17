@@ -62,6 +62,11 @@ kind of access.
 
 ## Residual risk
 
+The code travels in a URL, so it is written to the platform's request log like
+any other path. That is one more reason it is rotatable rather than permanent,
+and why it is a code of its own instead of the password.
+
+
 Whoever holds the card is admitted, exactly as with the password printed
 beside it. Guest pages show the event, the registry and the photo wall; the
 guest list lives behind the admin password. A card that ends up somewhere

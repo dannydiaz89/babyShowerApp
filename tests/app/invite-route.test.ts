@@ -110,6 +110,16 @@ describe("a scanned invitation", () => {
     expect(response.headers.get("location")).toBe("https://shower.example/invitation");
   });
 
+  it("will not send a scan to another scan", async () => {
+    const response = await scan(CODE, "?next=%2Fi%2F7QK4M2XR9T");
+    expect(response.headers.get("location")).toBe("https://shower.example/invitation");
+  });
+
+  it("asks not to be indexed, however the link is found", async () => {
+    const response = await scan(CODE);
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+
   it("clears the failure counter, like a correct password does", async () => {
     await scan(CODE);
     expect(callsTo(api.rateLimit.succeed)).toHaveLength(1);
