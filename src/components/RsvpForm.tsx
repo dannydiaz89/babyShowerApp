@@ -280,8 +280,8 @@ export function RsvpForm({
             {t.rsvp.contactHint}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
-            {emailField}
             {phoneField}
+            {emailField}
           </div>
         </fieldset>
       ) : (

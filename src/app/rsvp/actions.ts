@@ -97,8 +97,13 @@ export async function submitRsvp(
    * have turned the phone field off, email is the only option left.
    */
   if (!email && !phone) {
+    /*
+     * On whichever of the two comes first, so the error summary sends a guest
+     * to the top of the group rather than past the field they were most
+     * likely to fill in.
+     */
     if (settings.collectPhone) {
-      errors.email = t.rsvp.errContactRequired;
+      errors.phone = t.rsvp.errContactRequired;
     } else {
       errors.email = t.rsvp.errEmailRequired;
     }
