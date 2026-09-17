@@ -63,7 +63,7 @@ export const en = {
 
   rsvp: {
     title: "RSVP",
-    intro: "Kindly respond by {date}. It takes about a minute.",
+    intro: "Kindly respond by {date}.",
     attendingQuestion: "Will you be joining us?",
     accept: "Joyfully accepts",
     decline: "Regretfully declines",
@@ -599,7 +599,7 @@ export const es: Dictionary = {
 
   rsvp: {
     title: "Confirmar asistencia",
-    intro: "Les pedimos responder antes del {date}. Toma alrededor de un minuto.",
+    intro: "Les pedimos responder antes del {date}.",
     attendingQuestion: "¿Nos acompañarán?",
     accept: "Asistiré con gusto",
     decline: "No podré asistir",
