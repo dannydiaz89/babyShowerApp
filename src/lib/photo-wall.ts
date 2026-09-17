@@ -8,6 +8,26 @@
 import type { PhotoWallMode } from "@/lib/defaults";
 
 /**
+ * What the Drive folder is called.
+ *
+ * The event's date is in it because the name is otherwise the same string
+ * every time it is built, and Drive allows two folders to share a name — so
+ * a second one, made after a reconnect, would be indistinguishable from the
+ * first in the hosts' own Drive. The date is written the sortable way rather
+ * than the readable one: the folder sits in a list beside everything else
+ * they own, in whichever of two languages the site is set to, and "2026-11-07"
+ * means one thing in both.
+ *
+ * Pure, and read once when the folder is made — renaming the baby in Settings
+ * afterwards does not rename a folder that already exists.
+ */
+export function photoFolderName(babyName: string, startISO: string): string {
+  const date = startISO.split("T")[0];
+  const named = babyName.trim() || "Baby shower";
+  return date ? `${named} — photo wall — ${date}` : `${named} — photo wall`;
+}
+
+/**
  * The zone used when the settings do not name one. "The event date" means
  * the calendar date where the shower is, not on the server: Vercel runs in
  * UTC, and a wall that opened at 5 pm the day before — UTC midnight — would

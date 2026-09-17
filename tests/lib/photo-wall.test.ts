@@ -7,6 +7,7 @@ import {
   localDateISO,
   localDateTimeISO,
   pauseReason,
+  photoFolderName,
   photoWallState,
   withStorage,
   type StorageStatus,
@@ -257,5 +258,39 @@ describe("withStorage", () => {
   it("is not a pause when the wall is closed or not yet open anyway", () => {
     expect(withStorage({ visible: true, uploads: false, paused: null }, failing).paused).toBeNull();
     expect(withStorage({ visible: false, uploads: false, paused: null }, failing).paused).toBeNull();
+  });
+});
+
+/**
+ * The Drive folder's name. It is built once, when the hosts connect, and
+ * Drive will happily hold two folders that share one — so the date is what
+ * tells a second folder apart from the first if one ever appears.
+ */
+describe("photoFolderName", () => {
+  it("carries the baby's name and the date of the event", () => {
+    expect(photoFolderName("Baby Diaz Espana", "2026-11-07T15:00")).toBe(
+      "Baby Diaz Espana — photo wall — 2026-11-07"
+    );
+  });
+
+  it("writes the date the sortable way, which reads the same in both languages", () => {
+    // The folder sits in a Drive listing next to everything else the hosts
+    // own; 07/11 and 11/07 are the same day to nobody.
+    expect(photoFolderName("Baby", "2026-11-07T15:00")).toContain("2026-11-07");
+  });
+
+  it("takes a bare date as happily as a datetime", () => {
+    expect(photoFolderName("Baby", "2026-11-07")).toBe("Baby — photo wall — 2026-11-07");
+  });
+
+  it("still names the folder something when the event has no date yet", () => {
+    expect(photoFolderName("Baby", "")).toBe("Baby — photo wall");
+  });
+
+  it("falls back to a name rather than leading with a dash", () => {
+    // A fresh install before the hosts have filled anything in.
+    expect(photoFolderName("   ", "2026-11-07T15:00")).toBe(
+      "Baby shower — photo wall — 2026-11-07"
+    );
   });
 });

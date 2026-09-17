@@ -6,9 +6,13 @@ import {
   accountEmail,
   createFolder,
   exchangeCode,
+  existingFolder,
+  findFolder,
+  getDriveConnection,
   googleConfigured,
   saveDriveConnection,
 } from "@/lib/google-drive";
+import { photoFolderName } from "@/lib/photo-wall";
 import { isAdminSession } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 
@@ -49,16 +53,37 @@ export async function GET(request: Request) {
 
   try {
     const { accessToken, refreshToken } = await exchangeCode(code, `${origin}/api/google/callback`);
-    const [account, settings] = await Promise.all([accountEmail(accessToken), getSettings()]);
+    const [account, settings, previous] = await Promise.all([
+      accountEmail(accessToken),
+      getSettings(),
+      // Read before the save below overwrites it.
+      getDriveConnection().catch(() => null),
+    ]);
 
-    const folderName = `${settings.babyName} — photo wall`;
-    const folder = await createFolder(accessToken, folderName);
+    const wanted = photoFolderName(settings.babyName, settings.startISO);
+
+    /*
+     * Reuse before creating. Drive is happy to hold two folders of the same
+     * name, so a plain create on every connect would leave the hosts with a
+     * pile of identical folders and their originals split between them. The
+     * one this connection used comes first; a folder the site made earlier
+     * under the same name is the fallback for when the stored row is gone.
+     * Only when neither is there is a new one the right answer — which is
+     * also what happens after the hosts revoke the grant in their Google
+     * account, since the site can no longer see what it made.
+     */
+    const folder =
+      (await existingFolder(accessToken, previous?.folderId)) ??
+      (await findFolder(accessToken, wanted)) ??
+      { ...(await createFolder(accessToken, wanted)), name: wanted };
 
     await saveDriveConnection({
       refreshToken,
       account,
       folderId: folder.id,
-      folderName,
+      // What the folder is actually called, which is not `wanted` when an
+      // older one is reused: the hosts should read the name Drive shows.
+      folderName: folder.name || wanted,
       folderUrl: folder.url,
     });
     return back(origin, "connected");

@@ -371,6 +371,86 @@ async function driveFetch(
 }
 
 /** Make the folder the photos will land in, inside the hosts' My Drive. */
+/** What Drive says about one folder, or null if it is gone. */
+type Folder = { id: string; name: string; url: string };
+
+function asFolder(json: { id: string; name?: string; webViewLink?: string }, fallbackName: string): Folder {
+  return {
+    id: json.id,
+    name: json.name ?? fallbackName,
+    url: json.webViewLink ?? `https://drive.google.com/drive/folders/${json.id}`,
+  };
+}
+
+/**
+ * The folder this connection used before, if it is still there.
+ *
+ * Disconnecting only forgets the stored row; Google keeps the grant, so the
+ * folder the site made is still its own to write to. Reusing it is what stops
+ * a reconnect from leaving a second folder of the same name beside the first,
+ * with the originals split between them and no way to tell which is which.
+ */
+export async function existingFolder(
+  accessToken: string,
+  folderId: string | undefined
+): Promise<Folder | null> {
+  if (!folderId) return null;
+  try {
+    const response = await driveFetch(
+      accessToken,
+      `${DRIVE_API}/files/${encodeURIComponent(folderId)}?fields=id,name,webViewLink,trashed`
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      id: string;
+      name?: string;
+      webViewLink?: string;
+      trashed?: boolean;
+    };
+    // A folder in the bin is not somewhere to put photos.
+    if (json.trashed) return null;
+    return asFolder(json, "");
+  } catch {
+    return null;
+  }
+}
+
+/** A single-quoted value inside a Drive `q` expression. */
+function quote(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+/**
+ * A folder of this name the site made earlier.
+ *
+ * The second line of defence, for when the stored row is gone entirely — a
+ * fresh deployment against the same Drive, say. `drive.file` only ever lists
+ * files this app created, so this cannot find, let alone touch, a folder of
+ * the hosts' own that happens to share the name.
+ */
+export async function findFolder(accessToken: string, name: string): Promise<Folder | null> {
+  const q = [
+    `name = '${quote(name)}'`,
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+  ].join(" and ");
+
+  try {
+    const response = await driveFetch(
+      accessToken,
+      `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=1`
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
+      files?: { id: string; name?: string; webViewLink?: string }[];
+    };
+    const found = json.files?.[0];
+    return found ? asFolder(found, name) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createFolder(
   accessToken: string,
   name: string
