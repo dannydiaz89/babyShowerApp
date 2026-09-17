@@ -120,6 +120,7 @@ export default async function SettingsPage({
           locale={locale}
           hasStoredPassword={Boolean(guestPasswordHash)}
           invite={invite}
+          inviteKnown={stored.available}
           drive={drive}
           initialTab={initialTab}
         />

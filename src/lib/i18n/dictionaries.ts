@@ -329,6 +329,12 @@ export const en = {
     inviteCardInvitationHint: "Opens the invitation. This is the one for the printed cards.",
     inviteCardPhotos: "On the tables",
     inviteCardPhotosHint: "Opens the photo wall, ready to add photos. Nice on a table card.",
+    inviteFailed:
+      "That did not go through, or we could not confirm it. Reload the page to "
+      + "see where the link stands — until then, assume the old one still works.",
+    inviteUnavailable:
+      "We cannot reach the database, so the link cannot be shown or changed "
+      + "from here. Any link you have already made is unaffected and still works.",
     inviteReplace: "Replace with a new link",
     inviteReplaceHint:
       "Replacing makes every printed card stop working. Guests already signed "
@@ -858,6 +864,13 @@ export const es: Dictionary = {
     inviteCardInvitationHint: "Abre la invitación. Este es el de las tarjetas impresas.",
     inviteCardPhotos: "Para las mesas",
     inviteCardPhotosHint: "Abre el muro de fotos, listo para subir. Ideal en una tarjeta de mesa.",
+    inviteFailed:
+      "No se pudo completar, o no pudimos confirmarlo. Recarguen la página para "
+      + "ver cómo quedó el enlace; mientras tanto, supongan que el anterior sigue "
+      + "funcionando.",
+    inviteUnavailable:
+      "No podemos conectarnos a la base de datos, así que el enlace no se puede "
+      + "ver ni cambiar desde aquí. El enlace que ya hayan creado sigue funcionando.",
     inviteReplace: "Reemplazar por uno nuevo",
     inviteReplaceHint:
       "Al reemplazarlo, las tarjetas impresas dejan de funcionar. Quienes ya "

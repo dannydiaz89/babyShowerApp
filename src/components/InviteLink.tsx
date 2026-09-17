@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { setInviteLink } from "@/app/admin/settings/actions";
 import {
+  Alert,
   Button,
   Card,
   CheckIcon,
@@ -35,6 +36,13 @@ export type InviteCard = {
 
 export type InviteLinkProps = {
   t: Dictionary;
+  /**
+   * False when settings could not be read. Distinct from "no link has been
+   * made": during an outage the stored code cannot be seen, and drawing the
+   * empty state would tell the hosts there is no link to worry about when
+   * there may be one, printed and working.
+   */
+  known: boolean;
   cards: InviteCard[];
 };
 
@@ -101,14 +109,16 @@ async function downloadPng(card: InviteCard): Promise<void> {
  * one, and the page fails to hydrate.
  */
 function IntentForm({
+  action,
   intent,
   children,
 }: {
+  action: (formData: FormData) => void;
   intent: "create" | "replace" | "remove";
   children: React.ReactNode;
 }) {
   return (
-    <form action={setInviteLink}>
+    <form action={action}>
       <input type="hidden" name="intent" value={intent} />
       {children}
     </form>
@@ -203,7 +213,7 @@ function QrCard({ card, t }: { card: InviteCard; t: Dictionary }) {
   );
 }
 
-export function InviteLink({ t, cards }: InviteLinkProps) {
+export function InviteLink({ t, known, cards }: InviteLinkProps) {
   /*
    * Keyed on the link itself, which is what everything inside is about: a
    * half-finished "remove it?", a "Copied" that has not faded yet. Make,
@@ -212,11 +222,12 @@ export function InviteLink({ t, cards }: InviteLinkProps) {
    * state, and the confirmation you opened before removing one link is still
    * sitting there, on the buttons for the link you just made.
    */
-  return <LinkPanel key={cards[0]?.url ?? "none"} t={t} cards={cards} />;
+  return <LinkPanel key={cards[0]?.url ?? "none"} t={t} known={known} cards={cards} />;
 }
 
-function LinkPanel({ t, cards }: InviteLinkProps) {
+function LinkPanel({ t, known, cards }: InviteLinkProps) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [state, act] = useActionState(setInviteLink, { status: "idle" } as const);
   const made = cards.length > 0;
 
   return (
@@ -224,7 +235,23 @@ function LinkPanel({ t, cards }: InviteLinkProps) {
       <Overline as="h2">{t.settings.inviteTitle}</Overline>
       <p className="mt-2 text-sm leading-relaxed text-ink-muted">{t.settings.inviteIntro}</p>
 
-      {made ? (
+      {/*
+        * A write that failed, or that we could not confirm. Said out loud,
+        * because "remove the link" that quietly did nothing leaves the hosts
+        * believing their printed cards are dead when every one of them still
+        * opens the invitation.
+        */}
+      {state.status === "error" && state.message ? (
+        <Alert tone="critical" role="status" className="mt-4">
+          {state.message}
+        </Alert>
+      ) : null}
+
+      {!known ? (
+        <Alert tone="critical" className="mt-4">
+          {t.settings.inviteUnavailable}
+        </Alert>
+      ) : made ? (
         <>
           <div className="mt-5 space-y-4">
             {cards.map((card) => (
@@ -233,7 +260,7 @@ function LinkPanel({ t, cards }: InviteLinkProps) {
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <IntentForm intent="replace">
+            <IntentForm action={act} intent="replace">
               <Button type="submit" variant="secondary">
                 {t.settings.inviteReplace}
               </Button>
@@ -241,7 +268,7 @@ function LinkPanel({ t, cards }: InviteLinkProps) {
 
             {confirmingRemove ? (
               <>
-                <IntentForm intent="remove">
+                <IntentForm action={act} intent="remove">
                   <Button type="submit">{t.settings.inviteRemoveConfirm}</Button>
                 </IntentForm>
                 <Button
@@ -269,7 +296,7 @@ function LinkPanel({ t, cards }: InviteLinkProps) {
         </>
       ) : (
         <div className="mt-5">
-          <IntentForm intent="create">
+          <IntentForm action={act} intent="create">
             <Button type="submit">{t.settings.inviteCreate}</Button>
           </IntentForm>
         </div>

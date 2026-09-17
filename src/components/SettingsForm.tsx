@@ -349,6 +349,7 @@ export function SettingsForm({
   locale,
   hasStoredPassword,
   invite,
+  inviteKnown,
   drive,
   initialTab = "event",
 }: {
@@ -358,6 +359,8 @@ export function SettingsForm({
   hasStoredPassword: boolean;
   /** The invite link's QR codes, empty until the hosts make one. */
   invite: InviteCard[];
+  /** False when settings could not be read, so "empty" means "unknown". */
+  inviteKnown: boolean;
   drive: DrivePanel;
   initialTab?: SettingsTab;
 }) {
@@ -1113,7 +1116,9 @@ export function SettingsForm({
 
       {/* Its own card, outside the panel: a form cannot hold another form,
           and these buttons write a credential rather than save a draft. */}
-      {tab === "access" ? <InviteLink t={t} cards={invite} /> : null}
+      {tab === "access" ? (
+        <InviteLink t={t} known={inviteKnown} cards={invite} />
+      ) : null}
 
       {/*
         * Dismissing this dialog any way — close button, backdrop, Escape —
