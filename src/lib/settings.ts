@@ -16,6 +16,14 @@ export type StoredSettings = Settings & {
    * Absent on rows written before this existed, which reads as "never".
    */
   guestSessionEpoch?: number;
+  /**
+   * The code behind the printed QR, once the hosts have made one.
+   *
+   * Kept out of `Settings` on purpose. That shape is what the config form
+   * writes back wholesale, and a credential has no business riding along with
+   * the venue name — nor being restorable by a host saving a stale tab.
+   */
+  inviteCode?: string;
   /** False when nothing has been saved and the site is showing defaults. */
   isConfigured: boolean;
   /**
@@ -70,6 +78,7 @@ export const getSettings = cache(async (): Promise<StoredSettings> => {
       ...settings,
       guestPasswordHash: row.guestPasswordHash,
       guestSessionEpoch: row.guestSessionEpoch,
+      inviteCode: row.inviteCode,
       isConfigured: true,
       available: true,
     };

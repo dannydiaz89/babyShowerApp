@@ -92,6 +92,37 @@ export const update = mutation({
 });
 
 /**
+ * Store, replace or clear the invite code behind the printed QR.
+ *
+ * Deliberately does not move `guestSessionEpoch`, which the password below
+ * does: printing a new card is not a reason to sign out every guest who
+ * scanned an old one. Rotating this invalidates the link, nothing else — and
+ * a guest holding a dead card can still type the password.
+ */
+export const setInviteCode = mutation({
+  args: { key: v.string(), code: v.union(v.string(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { key, code }) => {
+    assertServer(key);
+
+    const existing = await ctx.db
+      .query("settings")
+      .withIndex("by_singleton", (q) => q.eq("singleton", "settings"))
+      .unique();
+
+    if (!existing) {
+      throw new Error("Save your event details before making an invite link.");
+    }
+
+    await ctx.db.patch(existing._id, {
+      inviteCode: code ?? undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
  * Store a new guest password. Hashing happens in Next.js; Convex only ever
  * sees the derived key, never the password itself.
  *

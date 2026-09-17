@@ -95,6 +95,18 @@ export default defineSchema({
     // Optional: rows written before this existed read as the default, asked.
     askDietary: v.optional(v.boolean()),
 
+    /*
+     * The code behind the QR on the printed invitation. Stored in the clear,
+     * unlike the password beside it: the hosts have to be able to see the link
+     * again to reprint a card, and a code they can only read once is a code
+     * they will regenerate — killing the cards already on the tables. It is a
+     * bearer credential in a row that already holds nothing else the guest
+     * list does not, and rotating it is one click.
+     *
+     * Absent means no link has been made; the password is then the only way in.
+     */
+    inviteCode: v.optional(v.string()),
+
     // Guest password, rotatable without redeploying. "salt:derivedKey", both hex.
     // Absent means fall back to the SITE_PASSWORD environment variable.
     guestPasswordHash: v.optional(v.string()),
