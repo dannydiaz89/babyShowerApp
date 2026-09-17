@@ -1,11 +1,10 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { guestLogin } from "./actions";
 import { PasswordForm } from "@/components/PasswordForm";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { ArrivalLap } from "@/components/ArrivalLap";
 import { Card, DisplayTitle } from "@/components/ui";
-import { GUEST_COOKIE, verifyToken } from "@/lib/auth";
+import { hasCurrentGuestCookie } from "@/lib/session";
 import { getTranslation, contactLine, pickOptional } from "@/lib/i18n";
 import { safeNext } from "@/lib/nav";
 import { getSettings } from "@/lib/settings";
@@ -19,8 +18,14 @@ export default async function GatePage({
   // send someone to another origin — so it is filtered before either use.
   const next = safeNext((await searchParams).next);
 
-  // Someone who already has the password shouldn't see the gate again.
-  if (await verifyToken((await cookies()).get(GUEST_COOKIE)?.value, "guest")) {
+  /*
+   * Someone who already has the password shouldn't see the gate again — but
+   * "already has" has to mean what the pages behind this one mean by it. A
+   * cookie that predates the last password change is signed and unexpired and
+   * still refused everywhere else, so sending it onward only bounces it
+   * straight back here.
+   */
+  if (await hasCurrentGuestCookie()) {
     redirect(next);
   }
 
