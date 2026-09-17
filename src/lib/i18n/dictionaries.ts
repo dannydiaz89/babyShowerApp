@@ -71,6 +71,7 @@ export const en = {
     phone: "Phone",
     phonePlaceholder: "(512) 555-0134",
     optional: "(optional)",
+    contactLegend: "How can we reach you?",
     adults: "Adults",
     adultsHint: "(including you)",
     kids: "Children",
@@ -85,7 +86,8 @@ export const en = {
     sending: "Sending…",
     changeHint:
       "Need to change something later? Submit the form again with the same email or phone number and we'll update your answer.",
-    contactHint: "Either one is fine — whichever is easier to reach you on.",
+    contactHint:
+      "Please fill in at least one — whichever is easier. It's also how you'd update your answer later.",
     errorsHeading: "Please fix the following:",
 
     errNameRequired: "Please tell us your name.",
@@ -568,6 +570,7 @@ export const es: Dictionary = {
     phone: "Teléfono",
     phonePlaceholder: "(512) 555-0134",
     optional: "(opcional)",
+    contactLegend: "¿Cómo los contactamos?",
     adults: "Adultos",
     adultsHint: "(incluyéndolo a usted)",
     kids: "Niños",
@@ -582,7 +585,8 @@ export const es: Dictionary = {
     sending: "Enviando…",
     changeHint:
       "¿Necesitan cambiar algo después? Envíen el formulario otra vez con el mismo correo o teléfono y actualizaremos su respuesta.",
-    contactHint: "Cualquiera de los dos sirve, el que les sea más fácil.",
+    contactHint:
+      "Llenen al menos uno, el que les sea más fácil. También es así como pueden cambiar su respuesta después.",
     errorsHeading: "Por favor corrijan lo siguiente:",
 
     errNameRequired: "Por favor escriban su nombre.",

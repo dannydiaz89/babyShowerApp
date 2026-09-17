@@ -146,6 +146,63 @@ export function RsvpForm({
     <span className="font-normal normal-case tracking-normal">{t.rsvp.optional}</span>
   );
 
+  const nameField = (
+    <div>
+      <Label htmlFor={fieldId("name")}>{t.rsvp.name}</Label>
+      <Input
+        id={fieldId("name")}
+        name="name"
+        required
+        autoComplete="name"
+        aria-invalid={errors.name ? true : undefined}
+        aria-describedby={describedBy("name")}
+        placeholder={t.rsvp.namePlaceholder}
+      />
+      <FieldError id={errorId("name")} prefix={t.common.errorPrefix}>
+        {errors.name}
+      </FieldError>
+    </div>
+  );
+
+  const emailField = (
+    <div>
+      <Label htmlFor={fieldId("email")}>{t.rsvp.email}</Label>
+      <Input
+        id={fieldId("email")}
+        name="email"
+        type="email"
+        required={!collectPhone}
+        autoComplete="email"
+        aria-invalid={errors.email ? true : undefined}
+        aria-describedby={
+          describedBy("email") ?? (collectPhone ? contactHintId : undefined)
+        }
+        placeholder={t.rsvp.emailPlaceholder}
+      />
+      <FieldError id={errorId("email")} prefix={t.common.errorPrefix}>
+        {errors.email}
+      </FieldError>
+    </div>
+  );
+
+  const phoneField = (
+    <div>
+      <Label htmlFor={fieldId("phone")}>{t.rsvp.phone}</Label>
+      <Input
+        id={fieldId("phone")}
+        name="phone"
+        type="tel"
+        autoComplete="tel"
+        aria-invalid={errors.phone ? true : undefined}
+        aria-describedby={describedBy("phone") ?? contactHintId}
+        placeholder={t.rsvp.phonePlaceholder}
+      />
+      <FieldError id={errorId("phone")} prefix={t.common.errorPrefix}>
+        {errors.phone}
+      </FieldError>
+    </div>
+  );
+
   return (
     <form
       ref={formRef}
@@ -204,65 +261,30 @@ export function RsvpForm({
         </div>
       </fieldset>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor={fieldId("name")}>{t.rsvp.name}</Label>
-          <Input
-            id={fieldId("name")}
-            name="name"
-            required
-            autoComplete="name"
-            aria-invalid={errors.name ? true : undefined}
-            aria-describedby={describedBy("name")}
-            placeholder={t.rsvp.namePlaceholder}
-          />
-          <FieldError id={errorId("name")} prefix={t.common.errorPrefix}>
-            {errors.name}
-          </FieldError>
-        </div>
-        <div>
-          <Label htmlFor={fieldId("email")}>
-            {t.rsvp.email} {collectPhone ? optional : null}
-          </Label>
-          <Input
-            id={fieldId("email")}
-            name="email"
-            type="email"
-            required={!collectPhone}
-            autoComplete="email"
-            aria-invalid={errors.email ? true : undefined}
-            aria-describedby={describedBy("email")}
-            placeholder={t.rsvp.emailPlaceholder}
-          />
-          <FieldError id={errorId("email")} prefix={t.common.errorPrefix}>
-            {errors.email}
-          </FieldError>
-        </div>
-      </div>
+      {nameField}
 
+      {/*
+       * With the phone field on, neither contact detail is required by itself
+       * but one of the two is. Labelling each of them "(optional)" told a
+       * guest the opposite, and they only found out at the error summary. So
+       * the pair sits in its own group, side by side and equally weighted,
+       * under a legend and a line that asks for at least one. With the phone
+       * field off there is no choice to explain: email is simply required.
+       */}
       {collectPhone ? (
-        <div>
-          <Label htmlFor={fieldId("phone")}>
-            {t.rsvp.phone} {optional}
-          </Label>
-          <Input
-            id={fieldId("phone")}
-            name="phone"
-            type="tel"
-            autoComplete="tel"
-            aria-invalid={errors.phone ? true : undefined}
-            aria-describedby={describedBy("phone") ?? contactHintId}
-            placeholder={t.rsvp.phonePlaceholder}
-          />
-          <FieldError id={errorId("phone")} prefix={t.common.errorPrefix}>
-            {errors.phone}
-          </FieldError>
-          {/* Says plainly that one of the two is enough. */}
-          <p id={contactHintId} className="mt-1.5 text-xs text-ink-muted">
+        <fieldset>
+          <FieldsetLabel>{t.rsvp.contactLegend}</FieldsetLabel>
+          <p id={contactHintId} className="mb-3 text-xs text-ink-muted">
             {t.rsvp.contactHint}
           </p>
-        </div>
-      ) : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {emailField}
+            {phoneField}
+          </div>
+        </fieldset>
+      ) : (
+        emailField
+      )}
 
       {/* Everything below only matters if they're coming. */}
       {attending ? (
