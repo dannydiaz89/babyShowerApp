@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
+import { newInviteCode } from "@/lib/invite";
 import { hashPassword } from "@/lib/password";
 import { getSettings } from "@/lib/settings";
 import { fill, getTranslation } from "@/lib/i18n";
@@ -240,4 +241,44 @@ export async function saveSettings(
     console.error("Saving settings failed", error);
     return { status: "error", tab, message: t.settings.saveFailed };
   }
+}
+
+/**
+ * Make, replace or remove the invite link behind the printed QR.
+ *
+ * Its own action rather than a field on the access panel: this writes a
+ * credential the moment it is clicked, where that panel saves a form the host
+ * has filled in. Replacing is the same call as making one — the old code is
+ * simply gone, which is what "these cards no longer work" has to mean.
+ */
+export async function setInviteLink(formData: FormData): Promise<void> {
+  await assertAdmin();
+
+  const wanted = str(formData, "intent");
+
+  try {
+    const client = convexClient();
+    const key = convexKey();
+
+    // Like the password: the mutation patches a row, and a host who has saved
+    // nothing yet does not have one.
+    await client.mutation(api.settings.update, {
+      key,
+      fields: {},
+      defaults: DEFAULT_SETTINGS,
+    });
+
+    await client.mutation(api.settings.setInviteCode, {
+      key,
+      code: wanted === "remove" ? null : newInviteCode(),
+    });
+  } catch (error) {
+    console.error("Saving the invite link failed", error);
+  }
+
+  /*
+   * The whole layout: the code is read on the settings page, and a stale
+   * render would show the hosts a link that no longer opens anything.
+   */
+  revalidatePath("/", "layout");
 }

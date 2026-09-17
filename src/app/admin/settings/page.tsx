@@ -1,4 +1,6 @@
+import { headers } from "next/headers";
 import { SettingsForm, type DrivePanel } from "@/components/SettingsForm";
+import type { InviteCard } from "@/components/InviteLink";
 import { PageTitle } from "@/components/ui";
 import { AdminHeader } from "@/components/SiteHeader";
 import { PHOTO_STORAGE_CAP_BYTES } from "../../../../convex/limits";
@@ -7,7 +9,10 @@ import { getDriveConnection, googleConfigured, type DriveConnection } from "@/li
 import { fill, formatDateShort, getTranslation } from "@/lib/i18n";
 import { defaultClosesISO } from "@/lib/photo-wall";
 import { storageStatus, wallState } from "@/lib/photos";
+import { invitePath } from "@/lib/invite";
+import { qrCode } from "@/lib/qr";
 import { getSettings } from "@/lib/settings";
+import { originFrom } from "@/lib/site-origin";
 import { SETTINGS_TABS, type SettingsTab } from "@/lib/settings-tabs";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +27,35 @@ export default async function SettingsPage({
     getSettings(),
     searchParams,
   ]);
-  const { guestPasswordHash, isConfigured, ...settings } = stored;
+  /*
+   * Both credentials are pulled out by name before the rest is handed to the
+   * form. What is left is what the hosts may edit; a secret that rides along
+   * in a spread ends up in the page's HTML without anyone deciding it should.
+   * The invite code does go to the browser — below, deliberately, because the
+   * hosts have to see their own link.
+   */
+  const { guestPasswordHash, inviteCode, isConfigured, ...settings } = stored;
   void isConfigured;
+
+  const origin = originFrom(await headers()) ?? "";
+  const invite: InviteCard[] = inviteCode
+    ? [
+        {
+          url: `${origin}${invitePath(inviteCode)}`,
+          title: t.settings.inviteCardInvitation,
+          hint: t.settings.inviteCardInvitationHint,
+          file: "invitation-qr",
+          qr: qrCode(`${origin}${invitePath(inviteCode)}`),
+        },
+        {
+          url: `${origin}${invitePath(inviteCode, "/photos")}`,
+          title: t.settings.inviteCardPhotos,
+          hint: t.settings.inviteCardPhotosHint,
+          file: "photo-wall-qr",
+          qr: qrCode(`${origin}${invitePath(inviteCode, "/photos")}`),
+        },
+      ]
+    : [];
 
   const initialTab = SETTINGS_TABS.includes(params.tab as SettingsTab)
     ? (params.tab as SettingsTab)
@@ -87,6 +119,7 @@ export default async function SettingsPage({
           t={t}
           locale={locale}
           hasStoredPassword={Boolean(guestPasswordHash)}
+          invite={invite}
           drive={drive}
           initialTab={initialTab}
         />

@@ -7,21 +7,33 @@
  * origin from development is not worth recording, and would only make the
  * cron fail every ten minutes.
  */
-export function siteOriginFrom(headers: {
-  get(name: string): string | null;
-}): string | null {
+type Headers = { get(name: string): string | null };
+
+/**
+ * The origin this request was made to, development addresses included.
+ *
+ * What a host's own browser is looking at, which is what the invite link in
+ * Settings has to be built from: on localhost it must say localhost, or the
+ * QR a host scans to test their card goes nowhere.
+ */
+export function originFrom(headers: Headers): string | null {
   const host = (headers.get("x-forwarded-host") ?? headers.get("host") ?? "").split(",")[0].trim();
   if (!host) return null;
   const proto = (headers.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
   if (proto !== "http" && proto !== "https") return null;
 
-  let url: URL;
   try {
-    url = new URL(`${proto}://${host}`);
+    return new URL(`${proto}://${host}`).origin;
   } catch {
     return null;
   }
-  const name = url.hostname;
+}
+
+export function siteOriginFrom(headers: Headers): string | null {
+  const origin = originFrom(headers);
+  if (!origin) return null;
+
+  const name = new URL(origin).hostname;
   if (
     name === "localhost" ||
     name === "127.0.0.1" ||
@@ -31,5 +43,5 @@ export function siteOriginFrom(headers: {
   ) {
     return null;
   }
-  return url.origin;
+  return origin;
 }

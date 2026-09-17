@@ -4,6 +4,7 @@ import { useActionState, useCallback, useEffect, useId, useRef, useState } from 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
+import { InviteLink, type InviteCard } from "@/components/InviteLink";
 import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import type { DriveConnection } from "@/lib/google-drive";
 import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
@@ -320,6 +321,7 @@ export function SettingsForm({
   t,
   locale,
   hasStoredPassword,
+  invite,
   drive,
   initialTab = "event",
 }: {
@@ -327,6 +329,8 @@ export function SettingsForm({
   t: Dictionary;
   locale: Locale;
   hasStoredPassword: boolean;
+  /** The invite link's QR codes, empty until the hosts make one. */
+  invite: InviteCard[];
   drive: DrivePanel;
   initialTab?: SettingsTab;
 }) {
@@ -1078,6 +1082,10 @@ export function SettingsForm({
           />
         </Panel>
       ) : null}
+
+      {/* Its own card, outside the panel: a form cannot hold another form,
+          and these buttons write a credential rather than save a draft. */}
+      {tab === "access" ? <InviteLink t={t} cards={invite} /> : null}
 
       {/*
         * Dismissing this dialog any way — close button, backdrop, Escape —
