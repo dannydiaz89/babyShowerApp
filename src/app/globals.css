@@ -31,9 +31,12 @@
          is actually rendered on. Verified, not assumed. ------------------- */
   --color-ink: #272534;
   --color-ink-muted: #5c5b74;
-  /* Placeholders only. Sits on surface normally and on danger-soft when the
-     field is invalid — kept dark enough to clear AA on both. */
-  --color-ink-subtle: #5f5e77;
+  /* Placeholders only, and the lightest ink in the set: an example that reads
+     as dark as an answer makes an empty field look filled in. Sits on surface
+     normally and on danger-soft when the field is invalid, and this is as pale
+     as it can go while clearing AA on the second — 4.56:1, the tightest text
+     pair in the theme. The rest of the fix is the focus rule below. */
+  --color-ink-subtle: #66657e;
 
   /* --- Accent ------------------------------------------------------------ */
   --color-accent: #4d5395;
@@ -116,6 +119,16 @@ body {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: var(--radius-xs);
+}
+
+/*
+ * The placeholder is an example, not an answer, and it has done its job by
+ * the time the cursor arrives. Hiding it on focus leaves an unmistakably
+ * empty field to type into. Nothing a guest wrote is ever hidden: a
+ * placeholder only renders while the field is empty.
+ */
+:where(input, textarea):focus::placeholder {
+  color: transparent;
 }
 
 /* Visually hidden, still announced by screen readers. */
