@@ -123,7 +123,7 @@ export const en = {
     open: "Open",
     opensInNewTab: "opens in a new tab",
     shipping:
-      "Shipping a gift? Send it to {address} — or bring it along on {date}. Either is perfect.",
+      "Shipping a gift? Send it to {address} — or bring it along on {date}.",
   },
 
   admin: {
@@ -659,7 +659,7 @@ export const es: Dictionary = {
     open: "Abrir",
     opensInNewTab: "se abre en una pestaña nueva",
     shipping:
-      "¿Van a enviar un regalo? Mándenlo a {address}, o tráiganlo el {date}. Cualquiera de las dos está perfecta.",
+      "¿Van a enviar un regalo? Mándenlo a {address}, o tráiganlo el {date}.",
   },
 
   admin: {
