@@ -88,9 +88,15 @@ export default async function GatePage({
 
       <div className="mt-6 flex flex-col items-center gap-4">
         <LanguageToggle locale={locale} currentPath="/" />
-        <a href="/admin" className="text-xs text-ink-muted transition-colors hover:text-ink">
-          {t.gate.hostSignIn}
-        </a>
+        <div className="flex items-center gap-4 text-xs text-ink-muted">
+          <a href="/privacy" className="transition-colors hover:text-ink">
+            {t.privacy.title}
+          </a>
+          <span aria-hidden="true">·</span>
+          <a href="/admin" className="transition-colors hover:text-ink">
+            {t.gate.hostSignIn}
+          </a>
+        </div>
       </div>
     </main>
   );

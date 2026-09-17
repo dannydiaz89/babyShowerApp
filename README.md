@@ -138,6 +138,13 @@ photos be saved at full quality to a folder in your own Google Drive.
    In "Testing", Google expires the refresh token after seven days and the
    connection silently stops working. The only scope used, `drive.file`, is
    non-sensitive, so no verification is needed.
+
+   Google will not let you leave testing until the Branding page has an app
+   name, a support email, a homepage URL and a **privacy policy URL**. The
+   site serves one at `/privacy` — public, outside the password gate, in both
+   languages — so those last two are your site's root and `/privacy` on it.
+   Keep that page true: it describes what the app actually stores, and it is
+   the page a guest reads before handing over a phone number.
 4. Put the client id and secret in `GOOGLE_CLIENT_ID` and
    `GOOGLE_CLIENT_SECRET` (`.env.local` locally, the project settings on
    Vercel).

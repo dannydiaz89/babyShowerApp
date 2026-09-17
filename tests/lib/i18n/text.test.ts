@@ -4,6 +4,7 @@ import {
   pick,
   pickOptional,
   present,
+  formatDate,
   formatDateShort,
   formatTimeRange,
   contactLine,
@@ -53,6 +54,19 @@ describe("pick / pickOptional", () => {
     expect(pickOptional({ en: "", es: "" }, "en")).toBeNull();
     expect(pickOptional(undefined, "en")).toBeNull();
     expect(pickOptional({ en: "Something", es: "" }, "es")).toBe("Something");
+  });
+});
+
+describe("formatDate", () => {
+  it("keeps a full datetime on its own day", () => {
+    expect(formatDate("2026-11-07T15:00", "en")).toBe("Saturday, November 7, 2026");
+  });
+
+  it("does not slip to the previous day when given a bare date", () => {
+    // Every caller passed a datetime until one passed a date, and the page
+    // rendered the day before. The guard belongs in the helper, not in each
+    // caller remembering to add a time.
+    expect(formatDate("2026-11-07", "en")).toBe("Saturday, November 7, 2026");
   });
 });
 

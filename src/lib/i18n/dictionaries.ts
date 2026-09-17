@@ -116,6 +116,68 @@ export const en = {
     changeAnswer: "Change my answer",
   },
 
+  privacy: {
+    title: "Privacy",
+    intro:
+      "This is a private event management site for one baby shower, run by "
+      + "{names}. It is not a business and it sells nothing. Here is "
+      + "everything it keeps and who can see it.",
+    updated: "Last updated {date}.",
+
+    rsvpTitle: "What you tell the RSVP form",
+    rsvpBody:
+      "Your name, whichever of email or phone you give us, whether you are "
+      + "coming, how many are in your party, and anything you write in the "
+      + "guest list, meal, allergies or message boxes. Nothing else. Your "
+      + "contact detail is also how a second reply finds your first one and "
+      + "updates it, instead of counting you twice.",
+
+    photosTitle: "Photos you add",
+    photosBody:
+      "The photo itself, the name you type if you type one, and the size and "
+      + "date of the file. Your phone is given a random id in a cookie so the "
+      + "wall knows which photos are yours to remove; that id is never sent "
+      + "back to any browser, including yours.",
+
+    cookiesTitle: "Cookies",
+    cookiesBody:
+      "Four, none of them for tracking or advertising: the invitation "
+      + "password you entered, for 30 days; the hosts' sign-in, for 12 hours; "
+      + "the language you picked, for a year; and the random photo id above. "
+      + "There is no analytics, and no script on this site comes from anyone "
+      + "else.",
+
+    addressTitle: "Addresses",
+    addressBody:
+      "Wrong passwords and repeated submissions are counted against the "
+      + "network address they came from, which is what stops a stranger "
+      + "guessing the password or flooding the guest list. The counter is a "
+      + "number and a timestamp; a correct password deletes it.",
+
+    seenTitle: "Who sees it",
+    seenBody:
+      "{names}, through a dashboard behind a separate password, and they can "
+      + "download the replies as a spreadsheet to plan the day. Guests see "
+      + "each other's photos on the photo wall and nothing else — not the "
+      + "guest list, not anyone's contact details.",
+
+    keptTitle: "Where it is kept",
+    keptBody:
+      "The site runs on Vercel and its data lives in Convex, both in the "
+      + "United States. If the hosts have connected Google Drive, the "
+      + "full-quality original of each photo is saved to a folder in their "
+      + "own Drive, and the site can reach nothing else in it.",
+
+    deleteTitle: "Changing or removing it",
+    deleteBody:
+      "Send the RSVP form again with the same email or phone and it replaces "
+      + "your answer. You can remove your own photos from the wall. For "
+      + "anything else — take my reply off the list, delete that photo for "
+      + "good — ask the hosts and they will do it.",
+
+    backToInvitation: "Back to the invitation",
+  },
+
   registry: {
     title: "Registry",
     blurb:
@@ -650,6 +712,69 @@ export const es: Dictionary = {
     replacedEarlier: "Esto reemplazó su respuesta anterior.",
     viewRegistry: "Ver la mesa de regalos",
     changeAnswer: "Cambiar mi respuesta",
+  },
+
+  privacy: {
+    title: "Privacidad",
+    intro:
+      "Este es un sitio privado de organización de eventos, hecho para el baby "
+      + "shower de {names}. No es un negocio y no vende nada. Aquí está todo "
+      + "lo que guarda y quién puede verlo.",
+    updated: "Última actualización: {date}.",
+
+    rsvpTitle: "Lo que escriben en el formulario",
+    rsvpBody:
+      "Su nombre, el correo o el teléfono que nos dejen, si vienen, cuántos "
+      + "son y lo que escriban en los campos de acompañantes, comida, "
+      + "alergias o mensaje. Nada más. Ese dato de contacto también es lo que "
+      + "permite que una segunda respuesta encuentre la primera y la "
+      + "actualice, en vez de contarlos dos veces.",
+
+    photosTitle: "Las fotos que suben",
+    photosBody:
+      "La foto, el nombre que escriban si escriben uno, y el tamaño y la "
+      + "fecha del archivo. A su teléfono se le da un identificador al azar "
+      + "en una cookie para que el muro sepa cuáles fotos son suyas y pueda "
+      + "quitarlas; ese identificador nunca se envía a ningún navegador, ni "
+      + "al suyo.",
+
+    cookiesTitle: "Cookies",
+    cookiesBody:
+      "Cuatro, ninguna para rastreo ni publicidad: la contraseña de la "
+      + "invitación que escribieron, por 30 días; la sesión de los "
+      + "anfitriones, por 12 horas; el idioma que eligieron, por un año; y el "
+      + "identificador de fotos de arriba. No hay analíticas, y ningún script "
+      + "de este sitio viene de terceros.",
+
+    addressTitle: "Direcciones de red",
+    addressBody:
+      "Las contraseñas equivocadas y los envíos repetidos se cuentan contra "
+      + "la dirección de red de donde vienen, que es lo que impide que un "
+      + "desconocido adivine la contraseña o sature la lista. El contador es "
+      + "un número y una hora; una contraseña correcta lo borra.",
+
+    seenTitle: "Quién lo ve",
+    seenBody:
+      "{names}, desde un panel con otra contraseña, y pueden descargar las "
+      + "respuestas como hoja de cálculo para organizar el día. Los invitados "
+      + "ven las fotos de los demás en el muro y nada más: ni la lista de "
+      + "invitados ni los datos de contacto de nadie.",
+
+    keptTitle: "Dónde se guarda",
+    keptBody:
+      "El sitio funciona en Vercel y sus datos viven en Convex, ambos en "
+      + "Estados Unidos. Si los anfitriones conectaron Google Drive, el "
+      + "original en calidad completa de cada foto se guarda en una carpeta "
+      + "de su propio Drive, y el sitio no puede ver nada más de ahí.",
+
+    deleteTitle: "Cambiar o quitar sus datos",
+    deleteBody:
+      "Envíen el formulario otra vez con el mismo correo o teléfono y "
+      + "reemplaza su respuesta. Pueden quitar sus propias fotos del muro. "
+      + "Para cualquier otra cosa — que borren mi respuesta, que esa foto "
+      + "desaparezca — pídanselo a los anfitriones y lo harán.",
+
+    backToInvitation: "Volver a la invitación",
   },
 
   registry: {

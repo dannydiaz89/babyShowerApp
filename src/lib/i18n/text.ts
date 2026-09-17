@@ -46,7 +46,10 @@ const INTL_LOCALE: Record<Locale, string> = { en: "en-US", es: "es-MX" };
 
 /** "Saturday, October 18, 2026" / "sábado, 18 de octubre de 2026" */
 export function formatDate(iso: string, locale: Locale): string {
-  const date = new Date(iso);
+  // As in formatDateShort: a bare "YYYY-MM-DD" parses as UTC and lands on the
+  // previous day west of it. Every caller happened to pass a full datetime
+  // until one did not, and the page read Wednesday the 16th for the 17th.
+  const date = new Date(iso.includes("T") ? iso : `${iso}T12:00`);
   if (Number.isNaN(date.getTime())) return iso;
   return new Intl.DateTimeFormat(INTL_LOCALE[locale], {
     weekday: "long",
