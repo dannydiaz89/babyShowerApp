@@ -174,6 +174,18 @@ function QrCard({ card, t }: { card: InviteCard; t: Dictionary }) {
 }
 
 export function InviteLink({ t, cards }: InviteLinkProps) {
+  /*
+   * Keyed on the link itself, which is what everything inside is about: a
+   * half-finished "remove it?", a "Copied" that has not faded yet. Make,
+   * replace or remove a link and none of that means anything any more — the
+   * panel is looking at a different thing. Without the key React keeps the
+   * state, and the confirmation you opened before removing one link is still
+   * sitting there, on the buttons for the link you just made.
+   */
+  return <LinkPanel key={cards[0]?.url ?? "none"} t={t} cards={cards} />;
+}
+
+function LinkPanel({ t, cards }: InviteLinkProps) {
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const made = cards.length > 0;
 
