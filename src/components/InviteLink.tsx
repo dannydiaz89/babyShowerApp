@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { setInviteLink } from "@/app/admin/settings/actions";
-import { Alert, Button, Card, Input, Label, Overline } from "@/components/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  CheckIcon,
+  CopyIcon,
+  IconButton,
+  Input,
+  Label,
+  Overline,
+} from "@/components/ui";
 import type { Dictionary } from "@/lib/i18n";
 import type { QrCode } from "@/lib/qr";
 
@@ -108,6 +118,7 @@ function IntentForm({
 
 function QrCard({ card, t }: { card: InviteCard; t: Dictionary }) {
   const [copied, setCopied] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
 
   return (
     <div className="rounded-md border border-border bg-surface-sunken p-4">
@@ -127,30 +138,50 @@ function QrCard({ card, t }: { card: InviteCard; t: Dictionary }) {
 
         <div className="min-w-0 flex-1">
           <Label htmlFor={`invite-url-${card.file}`}>{t.settings.inviteUrl}</Label>
-          <Input
-            id={`invite-url-${card.file}`}
-            value={card.url}
-            readOnly
-            onFocus={(event) => event.currentTarget.select()}
-            className="font-mono text-xs"
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
+          <div className="relative">
+            <Input
+              ref={field}
+              id={`invite-url-${card.file}`}
+              value={card.url}
+              readOnly
+              onFocus={(event) => event.currentTarget.select()}
+              // Room for the button sitting on top of the field's right end.
+              className="pr-11 font-mono text-xs"
+            />
+            <IconButton
+              tone="neutral"
+              label={copied ? t.settings.inviteCopied : t.settings.inviteCopy}
+              className="absolute right-1 top-1/2 -translate-y-1/2"
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(card.url);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 } catch {
-                  // No clipboard permission: the field beside this is selected
-                  // on focus, so there is still a way to take the link.
+                  /*
+                   * No clipboard permission, or an insecure origin. Select the
+                   * link instead so the next keystroke copies it: a button
+                   * that looks like it worked and did nothing is worse than no
+                   * button, and this is the link the printer is waiting for.
+                   */
+                  field.current?.focus();
+                  field.current?.select();
                 }
               }}
             >
-              {copied ? t.settings.inviteCopied : t.settings.inviteCopy}
-            </Button>
+              {copied ? <CheckIcon /> : <CopyIcon />}
+            </IconButton>
+          </div>
+          {/*
+            * The icon swap is the whole feedback, and an icon is nothing to a
+            * screen reader. Say it in words as well — politely, so it waits
+            * for a gap rather than cutting across what is being read.
+            */}
+          <span role="status" aria-live="polite" className="sr-only">
+            {copied ? t.settings.inviteCopied : ""}
+          </span>
+
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button
               type="button"
               variant="secondary"

@@ -15,6 +15,7 @@ export {
   ChevronLeftIcon,
   ChevronRightIcon,
   CheckIcon,
+  CopyIcon,
   PlusIcon,
   PhotoIcon,
 } from "./Icon";
