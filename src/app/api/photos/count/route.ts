@@ -32,6 +32,16 @@ const CACHE_MS = 10_000;
 
 let cached: { at: number; totals: PhotoTotals } | null = null;
 
+/**
+ * The read in progress, shared by everyone who arrives during it.
+ *
+ * Without this the cache only helps between reads, not during one: thirty
+ * phones on the same fifteen-second tick all find the cache a moment expired
+ * and all go to Convex, which is the thundering herd the cache exists to
+ * prevent. They now wait on one read.
+ */
+let inFlight: Promise<PhotoTotals> | null = null;
+
 async function totals(): Promise<PhotoTotals> {
   const now = Date.now();
   const age = cached ? now - cached.at : Infinity;
@@ -42,9 +52,20 @@ async function totals(): Promise<PhotoTotals> {
    */
   if (cached && age >= 0 && age < CACHE_MS) return cached.totals;
 
-  const fresh = await loadTotals();
-  cached = { at: now, totals: fresh };
-  return fresh;
+  if (inFlight) return inFlight;
+
+  const read = loadTotals()
+    .then((fresh) => {
+      cached = { at: Date.now(), totals: fresh };
+      return fresh;
+    })
+    .finally(() => {
+      // Only ever clear our own: a later read has already replaced it.
+      if (inFlight === read) inFlight = null;
+    });
+
+  inFlight = read;
+  return read;
 }
 
 export async function GET() {

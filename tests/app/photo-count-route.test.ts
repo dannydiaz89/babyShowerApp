@@ -73,6 +73,34 @@ describe("the count endpoint", () => {
     expect(loadTotals).toHaveBeenCalledTimes(1);
   });
 
+  it("reads once for thirty phones that arrive together on an expired cache", async () => {
+    /*
+     * The case a sequential loop cannot show. Phones that loaded the wall at
+     * the same moment poll at the same moment, so they arrive together and
+     * all find the cache a shade too old — the thundering herd the cache is
+     * there to prevent.
+     */
+    let release: (value: { live: number; hidden: number; bytes: number }) => void = () => {};
+    loadTotals.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+
+    const inFlight = Array.from({ length: 30 }, () => GET());
+    release({ live: 12, hidden: 3, bytes: 0 });
+    const bodies = await Promise.all((await Promise.all(inFlight)).map((r) => r.json()));
+
+    expect(loadTotals).toHaveBeenCalledTimes(1);
+    // And every one of them is answered, not just the one that did the read.
+    expect(bodies).toHaveLength(30);
+    expect(bodies.every((b) => b.live === 12)).toBe(true);
+  });
+
+  it("lets the next caller retry after a read fails", async () => {
+    loadTotals.mockRejectedValueOnce(new Error("convex is down"));
+    expect((await GET()).status).toBe(500);
+
+    loadTotals.mockResolvedValue({ live: 5, hidden: 0, bytes: 0 });
+    expect(await (await GET()).json()).toEqual({ live: 5 });
+  });
+
   it("reads again once the window has passed", async () => {
     await GET();
     laterBySeconds(11);

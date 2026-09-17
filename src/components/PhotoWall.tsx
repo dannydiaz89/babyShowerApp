@@ -26,7 +26,16 @@ import {
   type WallFilter,
   type WallPage,
 } from "@/lib/photo-client";
-import { POLL_MIN_MS, countFor, nextDelay } from "@/lib/photo-poll";
+import {
+  MAX_HEAD_PAGES,
+  MAX_REBUILD_PAGES,
+  POLL_MIN_MS,
+  changeSince,
+  countFor,
+  newHead,
+  nextDelay,
+  type Counts,
+} from "@/lib/photo-poll";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 
 /**
@@ -156,63 +165,151 @@ export function PhotoWall({
   /*
    * The wall is server-rendered and the browser never talks to Convex — see
    * lib/convex.ts — so there is no subscription to ride on. Instead it asks
-   * "how many photos are there?", which is one small document, and fetches
-   * the page only when that number moves. Costs nothing on a quiet wall,
+   * "how many photos are there?", which is one small document, and reads the
+   * wall itself only when that answer moves. Costs nothing on a quiet wall,
    * feels live on a busy one.
    */
 
-  /** The latest photos and count, for a callback that must not go stale. */
+  /** The wall as it stands, for callbacks that must not close over a stale copy. */
   const photosRef = useRef(photos);
+  /** Both counts as last seen, or null until the first check answers. */
+  const countsRef = useRef<Counts | null>(null);
+  /** The tally on screen, which starts as the one the server rendered. */
   const countRef = useRef(count);
   useEffect(() => {
     photosRef.current = photos;
-    countRef.current = count;
-  }, [photos, count]);
+  }, [photos]);
 
   /**
-   * Put whatever is new at the front.
+   * Show a new list without moving the photo someone is looking at.
    *
-   * The newest page, minus everything already on screen. Prepending shifts
-   * every index by one, and `viewing` is an index — so an open viewer moves
-   * with it, rather than the photo under the reader's eyes changing to a
-   * different one.
+   * `viewing` is an index, and every one of them shifts when photos are
+   * added at the front or taken out of the middle. The open viewer follows
+   * its photo by id instead, and closes if that photo has gone — which is
+   * what a host hiding the photo you are staring at should do.
+   */
+  const showPhotos = useCallback((next: PhotoView[]) => {
+    setPhotos((current) => {
+      setViewing((index) => {
+        if (index === null) return null;
+        const id = current[index]?.id;
+        const moved = id ? next.findIndex((p) => p.id === id) : -1;
+        return moved >= 0 ? moved : null;
+      });
+      return next;
+    });
+  }, []);
+
+  /**
+   * Walk back from the newest photo until reaching one the wall already has.
+   *
+   * One page covers the ordinary case. A burst larger than a page — three
+   * phones emptying their camera rolls between two checks — is why this
+   * keeps asking: stopping at one page would leave those photos stranded
+   * behind a cursor that has already moved past them, reachable by no amount
+   * of scrolling.
    */
   const pullNewest = useCallback(async () => {
-    const page = await fetchWallPage(null, filter);
-    const seen = new Set(photosRef.current.map((p) => p.id));
-    const added = page.photos.filter((p) => !seen.has(p.id));
-    if (added.length === 0) return;
+    const known = new Set(photosRef.current.map((p) => p.id));
+    const fresh: PhotoView[] = [];
+    let cursorAt: string | null = null;
 
-    setPhotos((current) => [...added, ...current]);
-    setViewing((index) => (index === null ? index : index + added.length));
+    for (let page = 0; page < MAX_HEAD_PAGES; page++) {
+      const got: WallPage = await fetchWallPage(cursorAt, filter);
+      const { added, reachedKnown } = newHead(known, got.photos);
+      fresh.push(...added);
+
+      if (reachedKnown || got.done || !got.cursor) return fresh;
+      cursorAt = got.cursor;
+    }
+
+    return fresh;
   }, [filter]);
 
+  /**
+   * Read the wall again from the top, as far as the guest had scrolled.
+   *
+   * For when a photo is gone rather than arrived. Nothing fetched from the
+   * head can tell us that a photo three pages down has been hidden, so the
+   * pages the guest is holding are re-read and replaced wholesale.
+   */
+  const rebuild = useCallback(async (): Promise<WallPage> => {
+    const want = Math.max(photosRef.current.length, 1);
+    const collected: PhotoView[] = [];
+    let cursorAt: string | null = null;
+    let last: WallPage | null = null;
+
+    for (let page = 0; page < MAX_REBUILD_PAGES; page++) {
+      const got: WallPage = await fetchWallPage(cursorAt, filter);
+      collected.push(...got.photos);
+      last = got;
+
+      if (got.done || !got.cursor || collected.length >= want) break;
+      cursorAt = got.cursor;
+    }
+
+    return { photos: collected, cursor: last?.cursor ?? null, done: last?.done ?? true };
+  }, [filter]);
+
+  /*
+   * Whether the wall can change while someone is looking at it — which is a
+   * different question from whether they may add to it. The hosts' wall
+   * shows no upload button, because they moderate there and upload from the
+   * guest pages, but it is the wall most in need of watching: everything on
+   * it arrives from somebody else. Reading `canUpload` as "nothing will
+   * change here" left the hosts reloading to see the party's photos.
+   */
+  const mayChange = mode === "host" || canUpload;
+
   useEffect(() => {
-    /*
-     * A wall that takes no photos cannot gain any. That covers the week after
-     * the shower, when it has closed, and a pause while storage is not ready
-     * — in both cases the timer would be asking a question with one answer.
-     */
-    if (!canUpload) return;
+    // The week after the shower, when the wall has closed, nobody polls.
+    if (!mayChange) return;
 
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delay = POLL_MIN_MS;
+    /*
+     * One check at a time, and only the newest one counts. Foregrounding a
+     * tab fires visibilitychange and focus together, and the timer may come
+     * due in the middle of either: without this, two checks race, both read
+     * the same "before" state, and both add the same photos.
+     */
+    let running = false;
+    let generation = 0;
 
     const check = async () => {
       // A phone in a pocket, or a tab behind another, asks nothing at all.
-      if (stopped || document.visibilityState !== "visible") return;
+      if (stopped || running || document.visibilityState !== "visible") return;
 
+      running = true;
+      const mine = ++generation;
       try {
         const counts = await fetchWallCount();
-        const total = countFor(counts, filter);
-        const changed = total !== countRef.current;
+        if (stopped || mine !== generation) return;
 
-        if (changed) {
-          setCount(total);
-          await pullNewest();
+        const visible = countFor(counts, filter);
+        const change = changeSince(countsRef.current, counts, {
+          before: countRef.current,
+          after: visible,
+        });
+        countsRef.current = counts;
+        countRef.current = visible;
+        setCount(visible);
+
+        if (change === "added") {
+          const added = await pullNewest();
+          // The wall may have moved on while those pages were in the air.
+          if (stopped || mine !== generation) return;
+          if (added.length > 0) showPhotos([...added, ...photosRef.current]);
+        } else if (change === "rebuild") {
+          const page = await rebuild();
+          if (stopped || mine !== generation) return;
+          showPhotos(page.photos);
+          setCursor(page.cursor);
+          setDone(page.done);
         }
-        delay = nextDelay(delay, changed);
+
+        delay = nextDelay(delay, change !== "none");
       } catch {
         /*
          * Offline, or the wall has closed under us. Neither is worth a
@@ -220,6 +317,8 @@ export function PhotoWall({
          * and tries again, and a reload would say so properly.
          */
         delay = nextDelay(delay, false);
+      } finally {
+        running = false;
       }
     };
 
@@ -231,12 +330,15 @@ export function PhotoWall({
 
     /*
      * Coming back to the tab is the moment a guest most expects to see what
-     * they missed: check at once, and from the fast end of the scale.
+     * they missed: check at once, from the fast end of the scale, and let
+     * the timer start again from there rather than firing on its old
+     * schedule a second later.
      */
     const onWake = () => {
       if (document.visibilityState !== "visible") return;
       delay = POLL_MIN_MS;
-      void check();
+      clearTimeout(timer);
+      void tick();
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -247,7 +349,7 @@ export function PhotoWall({
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
     };
-  }, [canUpload, filter, pullNewest]);
+  }, [filter, mayChange, pullNewest, rebuild, showPhotos]);
 
   /* ----------------------------------------------------------- actions */
 
