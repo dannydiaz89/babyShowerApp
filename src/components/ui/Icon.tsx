@@ -88,6 +88,35 @@ export function CheckIcon({ className = "h-4 w-4", ...props }: IconProps) {
   );
 }
 
+export function CopyIcon({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+export function EyeIcon({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon({ className = "h-4 w-4", ...props }: IconProps) {
+  return (
+    <svg {...BASE} className={className} {...props}>
+      <path d="M9.9 5.8A8.9 8.9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3 3.9" />
+      <path d="M6.5 7.9A17 17 0 0 0 2.5 12S6 18.5 12 18.5a9 9 0 0 0 3.5-.7" />
+      <path d="M10 10a2.8 2.8 0 0 0 4 4" />
+      <path d="M4 4l16 16" />
+    </svg>
+  );
+}
+
 export function PlusIcon({ className = "h-4 w-4", ...props }: IconProps) {
   return (
     <svg {...BASE} className={className} {...props}>

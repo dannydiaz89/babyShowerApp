@@ -44,13 +44,32 @@ export async function isAdminSession(): Promise<boolean> {
  * revoked guest their access back for exactly as long as Convex is down.
  */
 export async function hasGuestAccess(): Promise<boolean> {
-  const jar = await cookies();
-  const [guest, admin] = await Promise.all([
-    verifyToken(jar.get(GUEST_COOKIE)?.value, "guest"),
-    verifyToken(jar.get(ADMIN_COOKIE)?.value, "admin"),
-  ]);
-
+  const admin = await verifyToken((await cookies()).get(ADMIN_COOKIE)?.value, "admin");
   if (admin) return true;
+
+  return hasCurrentGuestCookie();
+}
+
+/**
+ * Whether the visitor holds a guest cookie that is still current: the same two
+ * checks `hasGuestAccess` makes, without the host bypass.
+ *
+ * This exists because the gate needs the epoch check too, and cannot use
+ * `hasGuestAccess` to get it. A host has no guest cookie, and answering "yes"
+ * for them would redirect them off "/" — which is where the host sign-in link
+ * lives.
+ *
+ * Every page that admits a guest must decide with the epoch, this one
+ * included. The gate used to look at the signature alone, and a cookie minted
+ * before the last password change passes that while failing
+ * `requireGuestAccess` on every page behind it: the gate sent the guest to the
+ * invitation, the invitation sent them back to the gate, and the browser gave
+ * up with a redirect loop instead of the password form. Rotating the password
+ * — the one action meant to cut a guest off politely — did that to every guest
+ * at once, for as long as their month-old cookie lasted.
+ */
+export async function hasCurrentGuestCookie(): Promise<boolean> {
+  const guest = await verifyToken((await cookies()).get(GUEST_COOKIE)?.value, "guest");
   if (!guest) return false;
 
   const settings = await getSettings();

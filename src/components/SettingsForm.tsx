@@ -4,6 +4,7 @@ import { useActionState, useCallback, useEffect, useId, useRef, useState } from 
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveSettings } from "@/app/admin/settings/actions";
+import { InviteLink, type InviteCard } from "@/components/InviteLink";
 import { DrivePauseNotice, StorageMeter } from "@/components/StorageNotice";
 import type { DriveConnection } from "@/lib/google-drive";
 import type { PauseReason, StorageStatus } from "@/lib/photo-wall";
@@ -28,6 +29,8 @@ import {
   Select,
   Tab,
   TabList,
+  EyeIcon,
+  EyeOffIcon,
   IconButton,
   Textarea,
   TrashIcon,
@@ -64,25 +67,50 @@ function Text({
   hint,
   defaultValue,
   type = "text",
+  reveal,
 }: {
   name: string;
   label: string;
   hint?: string;
   defaultValue?: string;
   type?: string;
+  /**
+   * Labels for the show/hide control on a password field. Given, the field
+   * gets an eye inside it: a host choosing a password should be able to read
+   * back what they typed before they hand it to two hundred people.
+   */
+  reveal?: { show: string; hide: string };
 }) {
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
+  const [shown, setShown] = useState(false);
+
   return (
     <div>
       <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        name={name}
-        type={type}
-        defaultValue={defaultValue}
-        aria-describedby={hintId}
-      />
+      <div className="relative">
+        <Input
+          id={id}
+          name={name}
+          // Revealing swaps the input's type, which is what browsers and
+          // password managers understand by "show it".
+          type={reveal && shown ? "text" : type}
+          defaultValue={defaultValue}
+          aria-describedby={hintId}
+          className={reveal ? "pr-11" : undefined}
+        />
+        {reveal ? (
+          <IconButton
+            tone="neutral"
+            label={shown ? reveal.hide : reveal.show}
+            aria-pressed={shown}
+            className="absolute right-1 top-1/2 -translate-y-1/2"
+            onClick={() => setShown((was) => !was)}
+          >
+            {shown ? <EyeOffIcon /> : <EyeIcon />}
+          </IconButton>
+        ) : null}
+      </div>
       {hint ? <Hint id={hintId}>{hint}</Hint> : null}
     </div>
   );
@@ -320,6 +348,8 @@ export function SettingsForm({
   t,
   locale,
   hasStoredPassword,
+  invite,
+  inviteKnown,
   drive,
   initialTab = "event",
 }: {
@@ -327,6 +357,10 @@ export function SettingsForm({
   t: Dictionary;
   locale: Locale;
   hasStoredPassword: boolean;
+  /** The invite link's QR codes, empty until the hosts make one. */
+  invite: InviteCard[];
+  /** False when settings could not be read, so "empty" means "unknown". */
+  inviteKnown: boolean;
   drive: DrivePanel;
   initialTab?: SettingsTab;
 }) {
@@ -1075,8 +1109,15 @@ export function SettingsForm({
             label={t.settings.guestPassword}
             hint={t.settings.guestPasswordHint}
             type="password"
+            reveal={{ show: t.common.showPassword, hide: t.common.hidePassword }}
           />
         </Panel>
+      ) : null}
+
+      {/* Its own card, outside the panel: a form cannot hold another form,
+          and these buttons write a credential rather than save a draft. */}
+      {tab === "access" ? (
+        <InviteLink t={t} known={inviteKnown} cards={invite} />
       ) : null}
 
       {/*

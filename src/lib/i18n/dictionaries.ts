@@ -20,6 +20,9 @@ export const en = {
       "Sign-in is temporarily unavailable because the database can't be reached. Admin sign-in stays closed until it is back.",
     unavailable:
       "We can't check the password right now because the database can't be reached. Please try again in a few minutes.",
+    linkStale:
+      "That invitation link isn't working any more. The password from your "
+      + "invitation still is.",
     lostPassword: "Lost the password? Text {name} or email {email}.",
     lostPasswordNameOnly: "Lost the password? Text {name}.",
     lostPasswordEmailOnly: "Lost the password? Email {email}.",
@@ -311,6 +314,33 @@ export const en = {
     mealOptionTooLong:
       "One meal option is too long to appear in the catering breakdown. Keep each label under {max} characters.",
 
+    inviteTitle: "Invite link and QR",
+    inviteIntro:
+      "A link that opens the invitation without the password, for the QR on "
+      + "your printed cards. Anyone who scans it is let in, so treat a "
+      + "printed card the way you treat the password itself.",
+    inviteCreate: "Make an invite link",
+    inviteUrl: "Link",
+    inviteCopy: "Copy link",
+    inviteCopied: "Copied",
+    inviteDownloadSvg: "Download SVG",
+    inviteDownloadPng: "Download PNG",
+    inviteCardInvitation: "On the invitation",
+    inviteCardInvitationHint: "Opens the invitation. This is the one for the printed cards.",
+    inviteCardPhotos: "On the tables",
+    inviteCardPhotosHint: "Opens the photo wall, ready to add photos. Nice on a table card.",
+    inviteFailed:
+      "That did not go through, or we could not confirm it. Reload the page to "
+      + "see where the link stands — until then, assume the old one still works.",
+    inviteUnavailable:
+      "We cannot reach the database, so the link cannot be shown or changed "
+      + "from here. Any link you have already made is unaffected and still works.",
+    inviteReplace: "Replace with a new link",
+    inviteReplaceHint:
+      "Replacing makes every printed card stop working. Guests already signed "
+      + "in stay signed in, and can still use the password.",
+    inviteRemove: "Remove the link",
+    inviteRemoveConfirm: "Yes, remove it",
     guestPassword: "New guest password",
     guestPasswordHint:
       "Leave blank to keep the current one. Guests already signed in stay signed in until their session expires.",
@@ -500,6 +530,9 @@ export const en = {
     no: "No",
     required: "required",
     errorPrefix: "Error:",
+    cancel: "Cancel",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     close: "Close",
   },
 };
@@ -523,6 +556,9 @@ export const es: Dictionary = {
       "El inicio de sesión no está disponible porque no se puede conectar con la base de datos. El acceso de anfitrión permanece cerrado hasta que vuelva.",
     unavailable:
       "No podemos verificar la contraseña en este momento porque no se puede conectar con la base de datos. Inténtenlo de nuevo en unos minutos.",
+    linkStale:
+      "Ese enlace de la invitación ya no funciona. La contraseña de su "
+      + "invitación sí.",
     lostPassword: "¿Perdieron la contraseña? Escriban a {name} o al correo {email}.",
     lostPasswordNameOnly: "¿Perdieron la contraseña? Escriban a {name}.",
     lostPasswordEmailOnly: "¿Perdieron la contraseña? Escriban al correo {email}.",
@@ -813,6 +849,34 @@ export const es: Dictionary = {
     mealOptionTooLong:
       "Una opción de comida es demasiado larga para aparecer en el resumen de catering. Usen menos de {max} caracteres por etiqueta.",
 
+    inviteTitle: "Enlace y código QR",
+    inviteIntro:
+      "Un enlace que abre la invitación sin contraseña, para el código QR de "
+      + "sus tarjetas impresas. Quien lo escanee entra, así que cuiden una "
+      + "tarjeta impresa como cuidan la contraseña.",
+    inviteCreate: "Crear un enlace",
+    inviteUrl: "Enlace",
+    inviteCopy: "Copiar enlace",
+    inviteCopied: "Copiado",
+    inviteDownloadSvg: "Descargar SVG",
+    inviteDownloadPng: "Descargar PNG",
+    inviteCardInvitation: "Para la invitación",
+    inviteCardInvitationHint: "Abre la invitación. Este es el de las tarjetas impresas.",
+    inviteCardPhotos: "Para las mesas",
+    inviteCardPhotosHint: "Abre el muro de fotos, listo para subir. Ideal en una tarjeta de mesa.",
+    inviteFailed:
+      "No se pudo completar, o no pudimos confirmarlo. Recarguen la página para "
+      + "ver cómo quedó el enlace; mientras tanto, supongan que el anterior sigue "
+      + "funcionando.",
+    inviteUnavailable:
+      "No podemos conectarnos a la base de datos, así que el enlace no se puede "
+      + "ver ni cambiar desde aquí. El enlace que ya hayan creado sigue funcionando.",
+    inviteReplace: "Reemplazar por uno nuevo",
+    inviteReplaceHint:
+      "Al reemplazarlo, las tarjetas impresas dejan de funcionar. Quienes ya "
+      + "entraron siguen dentro y pueden usar la contraseña.",
+    inviteRemove: "Quitar el enlace",
+    inviteRemoveConfirm: "Sí, quitarlo",
     guestPassword: "Nueva contraseña de invitados",
     guestPasswordHint:
       "Déjenla vacía para conservar la actual. Quienes ya iniciaron sesión seguirán conectados hasta que expire su sesión.",
@@ -1003,6 +1067,9 @@ export const es: Dictionary = {
     no: "No",
     required: "obligatorio",
     errorPrefix: "Error:",
+    cancel: "Cancelar",
+    showPassword: "Mostrar la contraseña",
+    hidePassword: "Ocultar la contraseña",
     close: "Cerrar",
   },
 };

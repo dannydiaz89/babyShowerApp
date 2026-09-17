@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { api } from "../../../../convex/_generated/api";
 import { ADMIN_COOKIE, verifyToken } from "@/lib/auth";
 import { convexClient, convexKey } from "@/lib/convex";
+import { newInviteCode } from "@/lib/invite";
 import { hashPassword } from "@/lib/password";
 import { getSettings } from "@/lib/settings";
 import { fill, getTranslation } from "@/lib/i18n";
@@ -240,4 +241,65 @@ export async function saveSettings(
     console.error("Saving settings failed", error);
     return { status: "error", tab, message: t.settings.saveFailed };
   }
+}
+
+export type InviteLinkState = { status: "idle" | "done" | "error"; message?: string };
+
+/**
+ * Make, replace or remove the invite link behind the printed QR.
+ *
+ * Its own action rather than a field on the access panel: this writes a
+ * credential the moment it is clicked, where that panel saves a form the host
+ * has filled in. Replacing is the same call as making one — the old code is
+ * simply gone, which is what "these cards no longer work" has to mean.
+ *
+ * A failure is reported, never swallowed. "Remove the link" that quietly did
+ * nothing is the worst answer this page can give: the host believes the cards
+ * are dead, the code is still in the row, and every printed card still opens
+ * the invitation. The page is left alone in that case — not revalidated —
+ * because the only honest thing to show is what is actually stored, and
+ * during a Convex outage that cannot be read either.
+ */
+export async function setInviteLink(
+  _prev: InviteLinkState,
+  formData: FormData
+): Promise<InviteLinkState> {
+  await assertAdmin();
+
+  const { t } = await getTranslation();
+  const wanted = str(formData, "intent");
+
+  try {
+    const client = convexClient();
+    const key = convexKey();
+
+    // Like the password: the mutation patches a row, and a host who has saved
+    // nothing yet does not have one.
+    await client.mutation(api.settings.update, {
+      key,
+      fields: {},
+      defaults: DEFAULT_SETTINGS,
+    });
+
+    await client.mutation(api.settings.setInviteCode, {
+      key,
+      code: wanted === "remove" ? null : newInviteCode(),
+    });
+  } catch (error) {
+    console.error("Saving the invite link failed", error);
+    /*
+     * Either the write never happened or its answer was lost on the way back,
+     * and those two are not worth guessing between: the message says to
+     * reload, which reads the row rather than trusting this page.
+     */
+    return { status: "error", message: t.settings.inviteFailed };
+  }
+
+  /*
+   * The whole layout, and only now that a write has been confirmed: the code
+   * is read on the settings page, and a stale render would show the hosts a
+   * link that no longer opens anything.
+   */
+  revalidatePath("/", "layout");
+  return { status: "done" };
 }
