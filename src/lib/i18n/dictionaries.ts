@@ -20,6 +20,9 @@ export const en = {
       "Sign-in is temporarily unavailable because the database can't be reached. Admin sign-in stays closed until it is back.",
     unavailable:
       "We can't check the password right now because the database can't be reached. Please try again in a few minutes.",
+    linkStale:
+      "That invitation link isn't working any more. The password from your "
+      + "invitation still is.",
     lostPassword: "Lost the password? Text {name} or email {email}.",
     lostPasswordNameOnly: "Lost the password? Text {name}.",
     lostPasswordEmailOnly: "Lost the password? Email {email}.",
@@ -523,6 +526,9 @@ export const es: Dictionary = {
       "El inicio de sesión no está disponible porque no se puede conectar con la base de datos. El acceso de anfitrión permanece cerrado hasta que vuelva.",
     unavailable:
       "No podemos verificar la contraseña en este momento porque no se puede conectar con la base de datos. Inténtenlo de nuevo en unos minutos.",
+    linkStale:
+      "Ese enlace de la invitación ya no funciona. La contraseña de su "
+      + "invitación sí.",
     lostPassword: "¿Perdieron la contraseña? Escriban a {name} o al correo {email}.",
     lostPasswordNameOnly: "¿Perdieron la contraseña? Escriban a {name}.",
     lostPasswordEmailOnly: "¿Perdieron la contraseña? Escriban al correo {email}.",

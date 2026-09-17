@@ -3,7 +3,7 @@ import { guestLogin } from "./actions";
 import { PasswordForm } from "@/components/PasswordForm";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { ArrivalLap } from "@/components/ArrivalLap";
-import { Card, DisplayTitle } from "@/components/ui";
+import { Alert, Card, DisplayTitle } from "@/components/ui";
 import { hasCurrentGuestCookie } from "@/lib/session";
 import { getTranslation, contactLine, pickOptional } from "@/lib/i18n";
 import { safeNext } from "@/lib/nav";
@@ -12,11 +12,18 @@ import { getSettings } from "@/lib/settings";
 export default async function GatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; link?: string }>;
 }) {
+  const query = await searchParams;
   // `next` comes straight off the query string, and redirect() will happily
   // send someone to another origin — so it is filtered before either use.
-  const next = safeNext((await searchParams).next);
+  const next = safeNext(query.next);
+  /*
+   * Set by /i/<code> when a scanned link did not work: a code the hosts have
+   * replaced, or too many tries from this address. Compared against a literal
+   * rather than echoed, so nothing from the URL reaches the page.
+   */
+  const staleLink = query.link === "stale";
 
   /*
    * Someone who already has the password shouldn't see the gate again — but
@@ -55,6 +62,12 @@ export default async function GatePage({
           {tagline ? `${tagline}. ` : ""}
           {t.gate.intro}
         </p>
+
+        {staleLink ? (
+          <Alert tone="critical" role="status" className="mt-5 text-left">
+            {t.gate.linkStale}
+          </Alert>
+        ) : null}
 
         <div className="mt-7 text-left">
           <PasswordForm
