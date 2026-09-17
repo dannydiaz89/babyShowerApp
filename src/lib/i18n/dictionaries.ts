@@ -527,6 +527,8 @@ export const en = {
     required: "required",
     errorPrefix: "Error:",
     cancel: "Cancel",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     close: "Close",
   },
 };
@@ -1057,6 +1059,8 @@ export const es: Dictionary = {
     required: "obligatorio",
     errorPrefix: "Error:",
     cancel: "Cancelar",
+    showPassword: "Mostrar la contraseña",
+    hidePassword: "Ocultar la contraseña",
     close: "Cerrar",
   },
 };
