@@ -81,6 +81,14 @@ export function fetchWallPage(cursor: string | null, filter: WallFilter = "live"
   return call<WallPage>(`/api/photos?${params}`);
 }
 
+/**
+ * How many photos there are, which is how the wall notices new ones without
+ * asking for the photos themselves. `hidden` comes back for hosts only.
+ */
+export function fetchWallCount() {
+  return call<{ live: number; hidden?: number }>("/api/photos/count");
+}
+
 export function hidePhoto(id: string) {
   return call<{ ok: true }>(`/api/photos/${encodeURIComponent(id)}/hide`, { method: "POST" });
 }

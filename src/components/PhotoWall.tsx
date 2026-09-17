@@ -16,6 +16,7 @@ import { fill } from "@/lib/i18n/text";
 import { justifyRows } from "@/lib/justified";
 import {
   deletePhoto,
+  fetchWallCount,
   fetchWallPage,
   hidePhoto,
   messageFor,
@@ -25,6 +26,7 @@ import {
   type WallFilter,
   type WallPage,
 } from "@/lib/photo-client";
+import { POLL_MIN_MS, countFor, nextDelay } from "@/lib/photo-poll";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 
 /**
@@ -148,6 +150,104 @@ export function PhotoWall({
     observer.observe(el);
     return () => observer.disconnect();
   }, [done, loadMore]);
+
+  /* ------------------------------------------------- photos as they land */
+
+  /*
+   * The wall is server-rendered and the browser never talks to Convex — see
+   * lib/convex.ts — so there is no subscription to ride on. Instead it asks
+   * "how many photos are there?", which is one small document, and fetches
+   * the page only when that number moves. Costs nothing on a quiet wall,
+   * feels live on a busy one.
+   */
+
+  /** The latest photos and count, for a callback that must not go stale. */
+  const photosRef = useRef(photos);
+  const countRef = useRef(count);
+  useEffect(() => {
+    photosRef.current = photos;
+    countRef.current = count;
+  }, [photos, count]);
+
+  /**
+   * Put whatever is new at the front.
+   *
+   * The newest page, minus everything already on screen. Prepending shifts
+   * every index by one, and `viewing` is an index — so an open viewer moves
+   * with it, rather than the photo under the reader's eyes changing to a
+   * different one.
+   */
+  const pullNewest = useCallback(async () => {
+    const page = await fetchWallPage(null, filter);
+    const seen = new Set(photosRef.current.map((p) => p.id));
+    const added = page.photos.filter((p) => !seen.has(p.id));
+    if (added.length === 0) return;
+
+    setPhotos((current) => [...added, ...current]);
+    setViewing((index) => (index === null ? index : index + added.length));
+  }, [filter]);
+
+  useEffect(() => {
+    /*
+     * A wall that takes no photos cannot gain any. That covers the week after
+     * the shower, when it has closed, and a pause while storage is not ready
+     * — in both cases the timer would be asking a question with one answer.
+     */
+    if (!canUpload) return;
+
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let delay = POLL_MIN_MS;
+
+    const check = async () => {
+      // A phone in a pocket, or a tab behind another, asks nothing at all.
+      if (stopped || document.visibilityState !== "visible") return;
+
+      try {
+        const counts = await fetchWallCount();
+        const total = countFor(counts, filter);
+        const changed = total !== countRef.current;
+
+        if (changed) {
+          setCount(total);
+          await pullNewest();
+        }
+        delay = nextDelay(delay, changed);
+      } catch {
+        /*
+         * Offline, or the wall has closed under us. Neither is worth a
+         * message — the wall on screen is still the wall — so it backs off
+         * and tries again, and a reload would say so properly.
+         */
+        delay = nextDelay(delay, false);
+      }
+    };
+
+    const tick = async () => {
+      await check();
+      if (!stopped) timer = setTimeout(() => void tick(), delay);
+    };
+    timer = setTimeout(() => void tick(), delay);
+
+    /*
+     * Coming back to the tab is the moment a guest most expects to see what
+     * they missed: check at once, and from the fast end of the scale.
+     */
+    const onWake = () => {
+      if (document.visibilityState !== "visible") return;
+      delay = POLL_MIN_MS;
+      void check();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
+  }, [canUpload, filter, pullNewest]);
 
   /* ----------------------------------------------------------- actions */
 
