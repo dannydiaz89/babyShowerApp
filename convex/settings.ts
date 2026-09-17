@@ -34,6 +34,7 @@ export const editable = v.object({
   askMeal: v.boolean(),
   allowKids: v.boolean(),
   collectPhone: v.boolean(),
+  askDietary: v.boolean(),
   photoWall: v.union(v.literal("auto"), v.literal("open")),
   photoWallClosesISO: v.string(),
   photoStorage: v.union(v.literal("site"), v.literal("drive")),

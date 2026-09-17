@@ -58,6 +58,7 @@ export type Settings = {
   askMeal: boolean;
   allowKids: boolean;
   collectPhone: boolean;
+  askDietary: boolean;
   photoWall: PhotoWallMode;
   /**
    * Local datetime, "YYYY-MM-DDTHH:mm", after which uploads stop. Blank means
@@ -160,6 +161,7 @@ export const DEFAULT_SETTINGS: Settings = {
   askMeal: true,
   allowKids: true,
   collectPhone: true,
+  askDietary: true,
   photoWall: "auto",
   photoWallClosesISO: "",
   photoStorage: "site",

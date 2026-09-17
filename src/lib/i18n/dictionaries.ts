@@ -295,6 +295,10 @@ export const en = {
 
     askMeal: "Ask for meal preferences",
     askMealHint: "Useful for a seated meal, overkill for grazing tables.",
+    askDietary: "Ask about allergies and dietary needs",
+    askDietaryHint:
+      "Turn this off if you already know what everyone eats. Notes guests have "
+      + "already left stay on their RSVP.",
     allowKids: "Allow guests to bring children",
     allowKidsHint: "Turning this off removes the children field from the RSVP.",
     collectPhone: "Ask for a phone number",
@@ -793,6 +797,10 @@ export const es: Dictionary = {
 
     askMeal: "Preguntar preferencia de comida",
     askMealHint: "Útil para una comida sentada, innecesario para bocadillos.",
+    askDietary: "Preguntar por alergias y restricciones",
+    askDietaryHint:
+      "Desactívenlo si ya saben qué come cada quien. Las notas que ya dejaron "
+      + "los invitados se quedan en su confirmación.",
     allowKids: "Permitir que traigan niños",
     allowKidsHint: "Al desactivarlo se quita el campo de niños del formulario.",
     collectPhone: "Pedir número de teléfono",

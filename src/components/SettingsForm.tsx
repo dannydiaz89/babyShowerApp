@@ -768,6 +768,12 @@ export function SettingsForm({
             defaultChecked={settings.askMeal}
           />
           <Toggle
+            name="askDietary"
+            label={t.settings.askDietary}
+            hint={t.settings.askDietaryHint}
+            defaultChecked={settings.askDietary}
+          />
+          <Toggle
             name="allowKids"
             label={t.settings.allowKids}
             hint={t.settings.allowKidsHint}

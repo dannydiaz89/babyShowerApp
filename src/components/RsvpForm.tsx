@@ -26,6 +26,7 @@ export type RsvpFormProps = {
   eventDate: string;
   mealOptions: string[];
   askMeal: boolean;
+  askDietary: boolean;
   allowKids: boolean;
   collectPhone: boolean;
 };
@@ -94,6 +95,7 @@ export function RsvpForm({
   eventDate,
   mealOptions,
   askMeal,
+  askDietary,
   allowKids,
   collectPhone,
 }: RsvpFormProps) {
@@ -352,16 +354,18 @@ export function RsvpForm({
             </div>
           ) : null}
 
-          <div>
-            <Label htmlFor={fieldId("dietaryNotes")}>
-              {t.rsvp.dietary} {optional}
-            </Label>
-            <Input
-              id={fieldId("dietaryNotes")}
-              name="dietaryNotes"
-              placeholder={t.rsvp.dietaryPlaceholder}
-            />
-          </div>
+          {askDietary ? (
+            <div>
+              <Label htmlFor={fieldId("dietaryNotes")}>
+                {t.rsvp.dietary} {optional}
+              </Label>
+              <Input
+                id={fieldId("dietaryNotes")}
+                name="dietaryNotes"
+                placeholder={t.rsvp.dietaryPlaceholder}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 

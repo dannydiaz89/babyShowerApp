@@ -77,6 +77,7 @@ export async function submitRsvp(
    * meal has to be one the hosts actually put on the menu.
    */
   const meal = settings.askMeal ? text(formData, "meal") : "";
+  const dietaryNotes = settings.askDietary ? text(formData, "dietaryNotes") : "";
   const mealIsOffered = !meal || isOfferedMeal(meal, settings.mealOptions);
 
   const errors: Record<string, string> = {};
@@ -114,7 +115,7 @@ export async function submitRsvp(
     kids: String(count(formData, "kids", 0)),
     guestNames: text(formData, "guestNames"),
     meal,
-    dietaryNotes: text(formData, "dietaryNotes"),
+    dietaryNotes,
     message: text(formData, "message"),
   };
 
@@ -152,7 +153,7 @@ export async function submitRsvp(
       kids: settings.allowKids ? count(formData, "kids", 0) : 0,
       guestNames: text(formData, "guestNames") || undefined,
       meal: meal || undefined,
-      dietaryNotes: text(formData, "dietaryNotes") || undefined,
+      dietaryNotes: dietaryNotes || undefined,
       message: text(formData, "message") || undefined,
     });
 

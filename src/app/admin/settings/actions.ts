@@ -112,6 +112,7 @@ function fieldsForTab(tab: SettingsTab, form: FormData, stored: Settings): Parti
       return {
         mealOptions: readMealOptions(form),
         askMeal: bool(form, "askMeal"),
+        askDietary: bool(form, "askDietary"),
         allowKids: bool(form, "allowKids"),
         collectPhone: bool(form, "collectPhone"),
       };

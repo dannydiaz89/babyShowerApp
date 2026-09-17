@@ -37,6 +37,7 @@ export default async function RsvpPage() {
           eventDate={formatDate(settings.startISO, locale)}
           mealOptions={settings.mealOptions.map((option) => pick(option, locale))}
           askMeal={settings.askMeal}
+          askDietary={settings.askDietary}
           allowKids={settings.allowKids}
           collectPhone={settings.collectPhone}
         />

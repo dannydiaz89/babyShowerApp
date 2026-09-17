@@ -92,6 +92,8 @@ export default defineSchema({
     askMeal: v.boolean(),
     allowKids: v.boolean(),
     collectPhone: v.boolean(),
+    // Optional: rows written before this existed read as the default, asked.
+    askDietary: v.optional(v.boolean()),
 
     // Guest password, rotatable without redeploying. "salt:derivedKey", both hex.
     // Absent means fall back to the SITE_PASSWORD environment variable.

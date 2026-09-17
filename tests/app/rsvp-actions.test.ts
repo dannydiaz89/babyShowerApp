@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { en } from "../../src/lib/i18n/dictionaries";
 import { MAX_TEXT } from "../../src/lib/meals";
+import type { Settings } from "../../src/lib/defaults";
 
 /**
  * A Server Action is its own public POST endpoint. Middleware does not run for
@@ -30,10 +31,18 @@ vi.mock("@/lib/convex", () => ({
   convexKey: () => "test-key",
 }));
 
+/** What the hosts have configured, over the built-in defaults. */
+let settings: Partial<Settings> = {};
+
 vi.mock("@/lib/settings", async () => {
   const { DEFAULT_SETTINGS: defaults } = await import("../../src/lib/defaults");
   return {
-    getSettings: async () => ({ ...defaults, isConfigured: true, available: true }),
+    getSettings: async () => ({
+      ...defaults,
+      ...settings,
+      isConfigured: true,
+      available: true,
+    }),
   };
 });
 
@@ -56,6 +65,7 @@ const VALID = {
 
 beforeEach(() => {
   cookieJar.clear();
+  settings = {};
   mutation.mockReset();
   // The limiter and the write are the only two mutations on this path, and
   // only the limiter takes a window.
@@ -200,5 +210,41 @@ describe("submitRsvp meal validation", () => {
 
     const [, written] = mutation.mock.calls.at(-1)!;
     expect(String(written.message)).toHaveLength(MAX_TEXT);
+  });
+});
+
+/**
+ * The hosts can turn a question off, and the field then stops rendering. This
+ * action is still a public POST, though: a submission carrying the field
+ * anyway must not store it, or an answer the hosts deliberately stopped
+ * asking for lands on the RSVP regardless — and shows up in the numbers they
+ * cater against.
+ */
+describe("a question the hosts turned off", () => {
+  beforeEach(async () => {
+    cookieJar.set(GUEST_COOKIE, await createToken("guest"));
+  });
+
+  it("stores a dietary note while the question is being asked", async () => {
+    await submitRsvp(
+      { status: "idle" },
+      form({ ...VALID, dietaryNotes: "No shellfish" })
+    );
+
+    const [, written] = mutation.mock.calls.at(-1)!;
+    expect(written.dietaryNotes).toBe("No shellfish");
+  });
+
+  it("drops one posted after the question was turned off", async () => {
+    settings = { askDietary: false };
+
+    const result = await submitRsvp(
+      { status: "idle" },
+      form({ ...VALID, dietaryNotes: "No shellfish" })
+    );
+
+    expect(result.status).toBe("success");
+    const [, written] = mutation.mock.calls.at(-1)!;
+    expect(written.dietaryNotes).toBeUndefined();
   });
 });
