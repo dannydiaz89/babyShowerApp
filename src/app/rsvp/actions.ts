@@ -154,6 +154,9 @@ export async function submitRsvp(
       guestNames: text(formData, "guestNames") || undefined,
       meal: meal || undefined,
       dietaryNotes: dietaryNotes || undefined,
+      // Off means "we did not ask", which leaves a stored note alone — not
+      // "the guest cleared it", which would delete one they left earlier.
+      askDietary: settings.askDietary,
       message: text(formData, "message") || undefined,
     });
 

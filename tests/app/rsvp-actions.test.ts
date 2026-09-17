@@ -246,5 +246,12 @@ describe("a question the hosts turned off", () => {
     expect(result.status).toBe("success");
     const [, written] = mutation.mock.calls.at(-1)!;
     expect(written.dietaryNotes).toBeUndefined();
+    /*
+     * And it says so, rather than leaving the mutation to read the absent
+     * note as a guest who cleared theirs — which would delete one they left
+     * while the question was still being asked. tests/convex/submit.test.ts
+     * is where that distinction is exercised against the database.
+     */
+    expect(written.askDietary).toBe(false);
   });
 });

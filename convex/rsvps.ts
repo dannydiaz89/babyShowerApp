@@ -267,9 +267,17 @@ async function retotal(
  * second.
  */
 export const submit = mutation({
-  args: { ...rsvpFields, key: v.string() },
+  args: {
+    ...rsvpFields,
+    key: v.string(),
+    /**
+     * Whether the hosts are still asking about allergies. Absent means they
+     * are, so a caller that predates the setting behaves as it always did.
+     */
+    askDietary: v.optional(v.boolean()),
+  },
   returns: v.object({ updated: v.boolean() }),
-  handler: async (ctx, { key, ...args }) => {
+  handler: async (ctx, { key, askDietary, ...args }) => {
     assertServer(key);
 
     const emailKey = toEmailKey(args.email);
@@ -295,7 +303,24 @@ export const submit = mutation({
         .first();
     }
 
-    const doc = { ...storedFields(args), adults, kids, updatedAt: now };
+    /*
+     * A question the hosts have turned off is not an answer the guest
+     * cleared. `patch` only touches the keys it is given, so dropping this
+     * one leaves what is stored exactly where it is: a guest who came back
+     * months later to fix their headcount cannot silently erase the allergy
+     * the kitchen is cooking around, on a form that no longer even shows it.
+     * The host paths keep every key — emptying that box on the dashboard is
+     * a host saying "delete this", and it still does.
+     */
+    const stored = storedFields(args);
+    const { dietaryNotes: _unasked, ...withoutDietaryNotes } = stored;
+
+    const doc = {
+      ...(askDietary === false ? withoutDietaryNotes : stored),
+      adults,
+      kids,
+      updatedAt: now,
+    };
 
     if (existing) {
       await ctx.db.patch(existing._id, doc);
