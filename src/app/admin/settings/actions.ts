@@ -236,7 +236,18 @@ export async function saveSettings(
     }
 
     revalidatePath("/", "layout");
-    return { status: "saved", tab, message: t.settings.saved, passwordMessage, passwordOk };
+    /*
+     * One message per save. The access tab says what happened to the password;
+     * "Saved. The site is updated." stacked above that is a second banner for
+     * the same click, and the vaguer of the two.
+     */
+    return {
+      status: "saved",
+      tab,
+      message: passwordMessage ? undefined : t.settings.saved,
+      passwordMessage,
+      passwordOk,
+    };
   } catch (error) {
     console.error("Saving settings failed", error);
     return { status: "error", tab, message: t.settings.saveFailed };
