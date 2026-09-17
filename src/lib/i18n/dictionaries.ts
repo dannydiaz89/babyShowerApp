@@ -579,7 +579,7 @@ export const es: Dictionary = {
   },
 
   invitation: {
-    eyebrow: "Acompáñennos",
+    eyebrow: "Acompáñenos",
     title: "Un Baby Shower",
     honoring: "en honor a {names}",
     rsvpCta: "Confirmar asistencia",
