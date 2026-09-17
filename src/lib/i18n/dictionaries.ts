@@ -329,8 +329,6 @@ export const en = {
     inviteCardInvitationHint: "Opens the invitation. This is the one for the printed cards.",
     inviteCardPhotos: "On the tables",
     inviteCardPhotosHint: "Opens the photo wall, ready to add photos. Nice on a table card.",
-    inviteKeepPassword:
-      "Keep the password printed too. Scanning fails on older phones and in bad light.",
     inviteReplace: "Replace with a new link",
     inviteReplaceHint:
       "Replacing makes every printed card stop working. Guests already signed "
@@ -860,8 +858,6 @@ export const es: Dictionary = {
     inviteCardInvitationHint: "Abre la invitación. Este es el de las tarjetas impresas.",
     inviteCardPhotos: "Para las mesas",
     inviteCardPhotosHint: "Abre el muro de fotos, listo para subir. Ideal en una tarjeta de mesa.",
-    inviteKeepPassword:
-      "Impriman también la contraseña. Escanear falla en teléfonos viejos y con poca luz.",
     inviteReplace: "Reemplazar por uno nuevo",
     inviteReplaceHint:
       "Al reemplazarlo, las tarjetas impresas dejan de funcionar. Quienes ya "

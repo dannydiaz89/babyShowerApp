@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { setInviteLink } from "@/app/admin/settings/actions";
 import {
-  Alert,
   Button,
   Card,
   CheckIcon,
@@ -232,10 +231,6 @@ function LinkPanel({ t, cards }: InviteLinkProps) {
               <QrCard key={card.file} card={card} t={t} />
             ))}
           </div>
-
-          <Alert tone="neutral" className="mt-5">
-            {t.settings.inviteKeepPassword}
-          </Alert>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <IntentForm intent="replace">
