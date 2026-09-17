@@ -30,6 +30,11 @@ discard them or stay put.
 Names, dates, venue, registries, meal options, contact details, and the guest
 password all live there and go live the moment you save.
 
+**Guest password** is also where the invite link lives: make one and you get a
+QR for the printed invitation and a second for a table card that opens the
+photo wall, each downloadable as SVG or PNG for the printer. Guests who scan
+skip the password. Print the password too — scanning fails on older phones.
+
 Free text (tagline, notes, dress code, registry descriptions) has an English
 and a Spanish box. Leave the Spanish blank and Spanish readers see the English.
 Dates are stored as real dates and formatted per language, so you never type
@@ -250,6 +255,13 @@ the browser never talks to Convex directly.
 **The admin password is the whole perimeter.** Make it long and random. Nothing
 below compensates for `hostsonly`.
 
+**The invite link is the password in another shape.** The QR on a printed card
+opens the invitation without typing anything, so a card that ends up somewhere
+public is worth as much as the password on it. It is a separate credential,
+though: rotate it from Settings in one click and every printed card stops
+working, without changing the password or signing anyone out. See
+[docs/qr-invite.md](docs/qr-invite.md).
+
 What's in place:
 
 - **Guessing is rate-limited.** Five wrong admin passwords from an address
@@ -276,7 +288,11 @@ What's in place:
   links, and a Permissions-Policy that turns off camera, microphone, and
   geolocation.
 - **The guest password is hashed** (PBKDF2-SHA256, 210k iterations) when set
-  from the Settings page, so the database never holds the password itself.
+  from the Settings page, so the database never holds the password itself. The
+  invite code beside it is not, because the hosts have to be able to read their
+  own link back to reprint a card — so it is rotatable instead, and gets its
+  own lockout bucket so a dead card cannot scan a guest out of the password
+  form.
 - **RSVP submissions are throttled** to 12 per address per hour, so nobody with
   the guest password can flood your headcount.
 - **You can collect less.** Turn off the phone field in Settings and it is
