@@ -5,7 +5,7 @@ import { Alert, ButtonLink, PageTitle } from "@/components/ui";
 import { getDriveConnection, googleConfigured, scheduleReconcile } from "@/lib/google-drive";
 import { fill, getTranslation } from "@/lib/i18n";
 import {
-  loadTotals,
+  loadWallBootstrap,
   loadWallPage,
   scheduleStorageSweep,
   storageStatus,
@@ -44,10 +44,14 @@ export default async function AdminPhotosPage({
   let page: Awaited<ReturnType<typeof loadWallPage>> | null = null;
   let totals = { live: 0, hidden: 0, bytes: 0, rev: 0 };
   try {
-    [page, totals] = await Promise.all([
-      loadWallPage({ filter, cursor: null, viewerId: null }),
-      loadTotals(),
-    ]);
+    /*
+     * One read, not two: a photo uploaded between a page read and a separate
+     * totals read is missing from the page and already counted in the
+     * revision the wall would then trust, so nothing fetches it.
+     */
+    const first = await loadWallBootstrap({ filter, viewerId: null });
+    page = first.page;
+    totals = first.totals;
   } catch (error) {
     console.error("Loading the photo wall failed", error);
   }

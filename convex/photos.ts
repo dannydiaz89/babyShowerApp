@@ -282,6 +282,31 @@ export const create = mutation({
  * reads rows it does not return. `viewerId` is the caller's device cookie
  * and only ever decides the `mine` flag.
  */
+/** One page of the wall. Shared by the paged query and the first-load one. */
+async function wallPage(
+  ctx: QueryCtx,
+  paginationOpts: { numItems: number; cursor: string | null },
+  filter: "live" | "hidden" | "all",
+  viewerId: string | null
+) {
+  const result =
+    filter === "all"
+      ? await ctx.db.query("photos").order("desc").paginate(paginationOpts)
+      : await ctx.db
+          .query("photos")
+          .withIndex("by_status", (q) => q.eq("status", filter))
+          .order("desc")
+          .paginate(paginationOpts);
+
+  const page: PhotoView[] = [];
+  for (const photo of result.page) {
+    const view = await toView(ctx, photo, viewerId);
+    if (view) page.push(view);
+  }
+
+  return { ...result, page };
+}
+
 export const wall = query({
   args: {
     key: v.string(),
@@ -292,23 +317,41 @@ export const wall = query({
   returns: paginationResultValidator(photoView),
   handler: async (ctx, { key, paginationOpts, filter, viewerId }) => {
     assertServer(key);
+    return wallPage(ctx, paginationOpts, filter, viewerId);
+  },
+});
 
-    const result =
-      filter === "all"
-        ? await ctx.db.query("photos").order("desc").paginate(paginationOpts)
-        : await ctx.db
-            .query("photos")
-            .withIndex("by_status", (q) => q.eq("status", filter))
-            .order("desc")
-            .paginate(paginationOpts);
+/**
+ * The first page and the revision it belongs to, read together.
+ *
+ * Two queries are two snapshots, and a photo uploaded between them lands in
+ * neither: the page is read before it exists, the revision after, and the
+ * wall then holds a revision it has not actually caught up to. Nothing
+ * changes again until the next write, so that photo stays missing however
+ * long anyone watches. One query is one transaction, so the page and the
+ * number describing it cannot disagree.
+ */
+export const bootstrap = query({
+  args: {
+    key: v.string(),
+    paginationOpts: paginationOptsValidator,
+    filter,
+    viewerId: v.union(v.string(), v.null()),
+  },
+  returns: v.object({ page: paginationResultValidator(photoView), totals: totalsValidator }),
+  handler: async (ctx, { key, paginationOpts, filter, viewerId }) => {
+    assertServer(key);
 
-    const page: PhotoView[] = [];
-    for (const photo of result.page) {
-      const view = await toView(ctx, photo, viewerId);
-      if (view) page.push(view);
-    }
-
-    return { ...result, page };
+    const row = await totalsRow(ctx);
+    return {
+      page: await wallPage(ctx, paginationOpts, filter, viewerId),
+      totals: {
+        live: row?.live ?? 0,
+        hidden: row?.hidden ?? 0,
+        bytes: row?.bytes ?? 0,
+        rev: row?.rev ?? 0,
+      },
+    };
   },
 });
 

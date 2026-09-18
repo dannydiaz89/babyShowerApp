@@ -740,3 +740,90 @@ describe("the wall revision", () => {
     expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(first);
   });
 });
+
+/**
+ * The first page and the revision it belongs to.
+ *
+ * Read separately they are two snapshots, and a photo uploaded between them
+ * is in neither: absent from the page, and already counted in the revision
+ * the wall then believes it has caught up to. Polling compares against that
+ * revision, finds no difference, and the photo stays missing until somebody
+ * uploads another or reloads. One query is one transaction.
+ */
+describe("bootstrap", () => {
+  it("refuses a caller without the server key", async () => {
+    const t = db();
+    await expect(
+      t.query(api.photos.bootstrap, {
+        key: "wrong",
+        filter: "live",
+        viewerId: null,
+        paginationOpts: { numItems: 10, cursor: null },
+      })
+    ).rejects.toThrow(/Not authorized/);
+  });
+
+  it("hands back the same photos the paged query would", async () => {
+    const t = db();
+    await addPhoto(t, "dev-a");
+    await addPhoto(t, "dev-b");
+
+    const paged = await wall(t, "live", "dev-a");
+    const boot = await t.query(api.photos.bootstrap, {
+      key: KEY,
+      filter: "live",
+      viewerId: "dev-a",
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+
+    expect(boot.page.page.map((p) => p.id)).toEqual(paged.page.map((p) => p.id));
+    // Including whose photos they are, which the wall marks per viewer.
+    expect(boot.page.page.map((p) => p.mine)).toEqual(paged.page.map((p) => p.mine));
+  });
+
+  it("describes the page it returned, not a later one", async () => {
+    const t = db();
+    await addPhoto(t, "dev-a");
+    await addPhoto(t, "dev-a");
+
+    const boot = await t.query(api.photos.bootstrap, {
+      key: KEY,
+      filter: "live",
+      viewerId: null,
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+
+    // The revision counts the writes that produced exactly these photos.
+    expect(boot.totals.rev).toBe(2);
+    expect(boot.totals.live).toBe(boot.page.page.length);
+  });
+
+  it("carries the hidden count a host's filters need", async () => {
+    const t = db();
+    const photo = await addPhoto(t, "dev-a");
+    await t.mutation(api.photos.hide, { key: KEY, id: photo.id, by: "host", uploaderId: null });
+
+    const boot = await t.query(api.photos.bootstrap, {
+      key: KEY,
+      filter: "all",
+      viewerId: null,
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+
+    expect(boot.totals).toMatchObject({ live: 0, hidden: 1, rev: 2 });
+    expect(boot.page.page).toHaveLength(1);
+  });
+
+  it("answers an empty wall with a revision of zero", async () => {
+    const t = db();
+    const boot = await t.query(api.photos.bootstrap, {
+      key: KEY,
+      filter: "live",
+      viewerId: null,
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+
+    expect(boot.page.page).toEqual([]);
+    expect(boot.totals.rev).toBe(0);
+  });
+});

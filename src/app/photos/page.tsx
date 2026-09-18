@@ -3,7 +3,7 @@ import { GuestHeader } from "@/components/SiteHeader";
 import { PhotoWall } from "@/components/PhotoWall";
 import { Alert, PageTitle } from "@/components/ui";
 import { getTranslation } from "@/lib/i18n";
-import { currentUploaderId, loadTotals, loadWallPage, wallState } from "@/lib/photos";
+import { currentUploaderId, loadWallBootstrap, wallState, type WallPage } from "@/lib/photos";
 import { getSettings } from "@/lib/settings";
 import { isAdminSession, requireGuestAccess } from "@/lib/session";
 
@@ -25,17 +25,18 @@ export default async function PhotosPage() {
   // previewing the site can still see it, since it is theirs to open.
   if (!wall.visible && !previewing) redirect("/invitation");
 
-  let page: Awaited<ReturnType<typeof loadWallPage>> | null = null;
+  let page: WallPage | null = null;
   let counts = { rev: 0, live: 0 };
   try {
-    const [first, totals] = await Promise.all([
-      loadWallPage({ filter: "live", cursor: null, viewerId }),
-      loadTotals(),
-    ]);
-    page = first;
-    // The same read the first page came from, so the wall's first check has
-    // something true to compare against.
-    counts = { rev: totals.rev, live: totals.live };
+    /*
+     * One read, not two. A photo uploaded between a page read and a separate
+     * totals read is in neither: missing from the wall, and already counted
+     * in the revision the wall then believes it has caught up to — so nothing
+     * would fetch it until the next upload happened along.
+     */
+    const first = await loadWallBootstrap({ filter: "live", viewerId });
+    page = first.page;
+    counts = { rev: first.totals.rev, live: first.totals.live };
   } catch (error) {
     console.error("Loading the photo wall failed", error);
   }

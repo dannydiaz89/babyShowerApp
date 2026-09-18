@@ -110,7 +110,7 @@ export const storageStatus = cache(async (): Promise<StorageStatus> => {
       : Promise.resolve(null),
     loadTotals().catch((error) => {
       console.error("Reading the photo totals failed", error);
-      return { live: 0, hidden: 0, bytes: 0 };
+      return { live: 0, hidden: 0, bytes: 0, rev: 0 };
     }),
   ]);
   return {
@@ -169,6 +169,38 @@ export async function loadWallPage({
     { key: convexKey(), filter, viewerId, paginationOpts: { numItems, cursor } }
   );
   return { photos: result.page, cursor: result.continueCursor, done: result.isDone };
+}
+
+/**
+ * The first page of the wall and the revision it belongs to, from one read.
+ *
+ * Both pages use this rather than asking for the page and the totals side by
+ * side: two queries are two snapshots, and a photo uploaded between them is
+ * in neither the page nor the revision the wall then trusts. See
+ * `photos.bootstrap`.
+ */
+export async function loadWallBootstrap({
+  filter,
+  viewerId,
+  numItems = PHOTO_PAGE_SIZE,
+}: {
+  filter: WallFilter;
+  viewerId: string | null;
+  numItems?: number;
+}): Promise<{ page: WallPage; totals: PhotoTotals }> {
+  const result: FunctionReturnType<typeof api.photos.bootstrap> = await convexClient().query(
+    api.photos.bootstrap,
+    { key: convexKey(), filter, viewerId, paginationOpts: { numItems, cursor: null } }
+  );
+
+  return {
+    page: {
+      photos: result.page.page,
+      cursor: result.page.continueCursor,
+      done: result.page.isDone,
+    },
+    totals: result.totals,
+  };
 }
 
 export async function loadTotals(): Promise<PhotoTotals> {
