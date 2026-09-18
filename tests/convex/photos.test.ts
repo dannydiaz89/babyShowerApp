@@ -34,6 +34,19 @@ async function storeCopy(t: T, bytes = 1000): Promise<Id<"_storage">> {
   return t.run(async (ctx) => ctx.storage.store(new Blob([new Uint8Array(bytes)])));
 }
 
+/**
+ * The three counters, without the write counter beside them.
+ *
+ * `rev` moves on every photo write and these tests are about what the
+ * counters hold, not how many times they were touched — the revision has its
+ * own tests at the bottom of this file.
+ */
+async function counters(t: T) {
+  const { rev, ...rest } = await t.query(api.photos.totals, { key: KEY });
+  void rev;
+  return rest;
+}
+
 async function addPhoto(
   t: T,
   uploaderId: string,
@@ -83,7 +96,7 @@ describe("create", () => {
     expect(view.uploaderName).toBe("Tía Rosa");
     expect(view.url).toMatch(/^http/);
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 
   it("refuses a web copy over the size limit and throws the file away", async () => {
@@ -103,7 +116,7 @@ describe("create", () => {
     // and leave the oversize file in storage for good.
     const stillThere = await t.run(async (ctx) => ctx.storage.getUrl(oversized));
     expect(stillThere).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 
   it("refuses dimensions the wall cannot lay out and drops the file", async () => {
@@ -174,7 +187,7 @@ describe("the storage cap", () => {
 
     await t.mutation(api.photos.remove, { key: KEY, id: a.id });
     await t.mutation(api.photos.remove, { key: KEY, id: b.id });
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 });
 
@@ -504,7 +517,7 @@ describe("hide", () => {
 
     expect(result.ok).toBe(false);
     expect((await wall(t, "live", null)).page).toHaveLength(1);
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 
   it("refuses a guest with no device cookie at all", async () => {
@@ -533,7 +546,7 @@ describe("hide", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 1, bytes: 1000 });
   });
 
   it("lets a host hide anyone's photo", async () => {
@@ -559,7 +572,7 @@ describe("hide", () => {
     await t.mutation(api.photos.hide, args);
     await t.mutation(api.photos.hide, args);
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 1, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 1, bytes: 1000 });
   });
 });
 
@@ -574,7 +587,7 @@ describe("restore", () => {
     const live = await wall(t, "live", null);
     expect(live.page.map((p) => p.id)).toEqual([photo.id]);
     expect(live.page[0].hiddenBy).toBeUndefined();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 1, hidden: 0, bytes: 1000 });
   });
 });
 
@@ -619,7 +632,7 @@ describe("remove", () => {
     expect(result.driveFileId).toBe("drive-123");
     expect((await wall(t, "all", null)).page).toHaveLength(0);
     expect(await t.run(async (ctx) => ctx.storage.getUrl(storageId))).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 
   it("takes a hidden photo out of the hidden count, not the live one", async () => {
@@ -630,7 +643,7 @@ describe("remove", () => {
 
     await t.mutation(api.photos.remove, { key: KEY, id: gone.id });
 
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 1, hidden: 0, bytes: 1000 });
+    expect(await counters(t)).toEqual({ live: 1, hidden: 0, bytes: 1000 });
     expect((await wall(t, "all", null)).page.map((p) => p.id)).toEqual([keep.id]);
   });
 
@@ -641,7 +654,7 @@ describe("remove", () => {
 
     const again = await t.mutation(api.photos.remove, { key: KEY, id: photo.id });
     expect(again.driveFileId).toBeNull();
-    expect(await t.query(api.photos.totals, { key: KEY })).toEqual({ live: 0, hidden: 0, bytes: 0 });
+    expect(await counters(t)).toEqual({ live: 0, hidden: 0, bytes: 0 });
   });
 });
 
@@ -669,5 +682,61 @@ describe("drive connection", () => {
 
     await t.mutation(api.drive.clear, { key: KEY });
     expect(await t.query(api.drive.get, { key: KEY })).toBeNull();
+  });
+});
+
+/**
+ * The wall's write counter.
+ *
+ * The photo wall polls a count to decide whether it is out of date, and
+ * counts alone cannot answer: a photo added and another deleted between two
+ * checks leaves every tally exactly where it was. This is the number that
+ * still moves, so a wall reading it knows to catch up.
+ */
+describe("the wall revision", () => {
+  it("is zero before any photo exists", async () => {
+    const t = db();
+    expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(0);
+  });
+
+  it("moves for every kind of write", async () => {
+    const t = db();
+    const photo = await addPhoto(t, "dev-a");
+    const afterAdd = (await t.query(api.photos.totals, { key: KEY })).rev;
+    expect(afterAdd).toBe(1);
+
+    await t.mutation(api.photos.hide, { key: KEY, id: photo.id, by: "host", uploaderId: null });
+    expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(2);
+
+    await t.mutation(api.photos.restore, { key: KEY, id: photo.id });
+    expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(3);
+
+    await t.mutation(api.photos.remove, { key: KEY, id: photo.id });
+    expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(4);
+  });
+
+  it("moves when a photo is added and another deleted, though the counts do not", async () => {
+    // The case the wall cannot see any other way.
+    const t = db();
+    const first = await addPhoto(t, "dev-a");
+    const before = await t.query(api.photos.totals, { key: KEY });
+
+    await addPhoto(t, "dev-b");
+    await t.mutation(api.photos.remove, { key: KEY, id: first.id });
+    const after = await t.query(api.photos.totals, { key: KEY });
+
+    expect(after.live).toBe(before.live);
+    expect(after.hidden).toBe(before.hidden);
+    expect(after.rev).toBe(before.rev + 2);
+  });
+
+  it("does not move for a read", async () => {
+    const t = db();
+    await addPhoto(t, "dev-a");
+
+    const first = (await t.query(api.photos.totals, { key: KEY })).rev;
+    await wall(t, "live", null);
+
+    expect((await t.query(api.photos.totals, { key: KEY })).rev).toBe(first);
   });
 });

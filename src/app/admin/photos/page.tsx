@@ -42,7 +42,7 @@ export default async function AdminPhotosPage({
   const filter = filterParam(params.filter);
 
   let page: Awaited<ReturnType<typeof loadWallPage>> | null = null;
-  let totals = { live: 0, hidden: 0, bytes: 0 };
+  let totals = { live: 0, hidden: 0, bytes: 0, rev: 0 };
   try {
     [page, totals] = await Promise.all([
       loadWallPage({ filter, cursor: null, viewerId: null }),
@@ -111,7 +111,7 @@ export default async function AdminPhotosPage({
             <PhotoWall
               key={filter}
               initial={page}
-              total={counts[filter]}
+              initialCounts={{ rev: totals.rev, live: totals.live, hidden: totals.hidden }}
               filter={filter}
               mode="host"
               canUpload={false}

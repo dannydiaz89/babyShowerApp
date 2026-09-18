@@ -26,14 +26,16 @@ export default async function PhotosPage() {
   if (!wall.visible && !previewing) redirect("/invitation");
 
   let page: Awaited<ReturnType<typeof loadWallPage>> | null = null;
-  let live = 0;
+  let counts = { rev: 0, live: 0 };
   try {
     const [first, totals] = await Promise.all([
       loadWallPage({ filter: "live", cursor: null, viewerId }),
       loadTotals(),
     ]);
     page = first;
-    live = totals.live;
+    // The same read the first page came from, so the wall's first check has
+    // something true to compare against.
+    counts = { rev: totals.rev, live: totals.live };
   } catch (error) {
     console.error("Loading the photo wall failed", error);
   }
@@ -80,7 +82,7 @@ export default async function PhotosPage() {
           {page ? (
             <PhotoWall
               initial={page}
-              total={live}
+              initialCounts={counts}
               filter="live"
               mode="guest"
               canUpload={canUpload}

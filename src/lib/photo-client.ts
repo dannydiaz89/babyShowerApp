@@ -86,7 +86,7 @@ export function fetchWallPage(cursor: string | null, filter: WallFilter = "live"
  * asking for the photos themselves. `hidden` comes back for hosts only.
  */
 export function fetchWallCount() {
-  return call<{ live: number; hidden?: number }>("/api/photos/count");
+  return call<{ rev: number; live: number; hidden?: number }>("/api/photos/count");
 }
 
 export function hidePhoto(id: string) {

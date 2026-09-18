@@ -38,7 +38,7 @@ beforeEach(() => {
   clock += 10 * 60 * 1000;
   vi.setSystemTime(clock);
   loadTotals.mockReset();
-  loadTotals.mockResolvedValue({ live: 12, hidden: 3, bytes: 0 });
+  loadTotals.mockResolvedValue({ live: 12, hidden: 3, bytes: 0, rev: 7 });
   role = "guest";
   visible = true;
 });
@@ -58,12 +58,12 @@ describe("the count endpoint", () => {
     const body = await (await GET()).json();
 
     // How many photos a guest cannot see is the hosts' business.
-    expect(body).toEqual({ live: 12 });
+    expect(body).toEqual({ rev: 7, live: 12 });
   });
 
   it("answers a host with both, so their filters can tell what moved", async () => {
     role = "host";
-    expect(await (await GET()).json()).toEqual({ live: 12, hidden: 3 });
+    expect(await (await GET()).json()).toEqual({ rev: 7, live: 12, hidden: 3 });
   });
 
   it("reads Convex once for everyone who asks inside the window", async () => {
@@ -80,11 +80,12 @@ describe("the count endpoint", () => {
      * all find the cache a shade too old — the thundering herd the cache is
      * there to prevent.
      */
-    let release: (value: { live: number; hidden: number; bytes: number }) => void = () => {};
+    let release: (value: { live: number; hidden: number; bytes: number; rev: number }) => void =
+      () => {};
     loadTotals.mockReturnValue(new Promise((resolve) => { release = resolve; }));
 
     const inFlight = Array.from({ length: 30 }, () => GET());
-    release({ live: 12, hidden: 3, bytes: 0 });
+    release({ live: 12, hidden: 3, bytes: 0, rev: 7 });
     const bodies = await Promise.all((await Promise.all(inFlight)).map((r) => r.json()));
 
     expect(loadTotals).toHaveBeenCalledTimes(1);
@@ -97,8 +98,8 @@ describe("the count endpoint", () => {
     loadTotals.mockRejectedValueOnce(new Error("convex is down"));
     expect((await GET()).status).toBe(500);
 
-    loadTotals.mockResolvedValue({ live: 5, hidden: 0, bytes: 0 });
-    expect(await (await GET()).json()).toEqual({ live: 5 });
+    loadTotals.mockResolvedValue({ live: 5, hidden: 0, bytes: 0, rev: 3 });
+    expect(await (await GET()).json()).toEqual({ rev: 3, live: 5 });
   });
 
   it("reads again once the window has passed", async () => {
@@ -112,10 +113,10 @@ describe("the count endpoint", () => {
   it("serves the fresher number after the window, not the cached one", async () => {
     await GET();
 
-    loadTotals.mockResolvedValue({ live: 20, hidden: 3, bytes: 0 });
+    loadTotals.mockResolvedValue({ live: 20, hidden: 3, bytes: 0, rev: 9 });
     laterBySeconds(11);
 
-    expect(await (await GET()).json()).toEqual({ live: 20 });
+    expect(await (await GET()).json()).toEqual({ rev: 9, live: 20 });
   });
 
   it("is never cached by the browser, whatever the server keeps", async () => {
@@ -144,11 +145,11 @@ describe("the count endpoint", () => {
 describe("a clock that moves backwards", () => {
   it("does not freeze the cache until it catches up", async () => {
     await GET();
-    loadTotals.mockResolvedValue({ live: 99, hidden: 0, bytes: 0 });
+    loadTotals.mockResolvedValue({ live: 99, hidden: 0, bytes: 0, rev: 40 });
 
     // An NTP correction on the host, mid-party.
     laterBySeconds(-120);
 
-    expect(await (await GET()).json()).toEqual({ live: 99 });
+    expect(await (await GET()).json()).toEqual({ rev: 40, live: 99 });
   });
 });

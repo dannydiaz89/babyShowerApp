@@ -63,7 +63,7 @@ function targetHeight(width: number): number {
 
 export function PhotoWall({
   initial,
-  total,
+  initialCounts,
   filter,
   mode,
   canUpload,
@@ -72,8 +72,11 @@ export function PhotoWall({
   locale,
 }: {
   initial: WallPage;
-  /** How many photos match `filter` in all, for the header. */
-  total: number;
+  /**
+   * The wall's tallies and revision, from the same read as `initial` — so the
+   * first check knows whether anything has happened since the page rendered.
+   */
+  initialCounts: Counts;
   filter: WallFilter;
   mode: Mode;
   canUpload: boolean;
@@ -84,7 +87,7 @@ export function PhotoWall({
   const [photos, setPhotos] = useState(initial.photos);
   const [cursor, setCursor] = useState(initial.cursor);
   const [done, setDone] = useState(initial.done);
-  const [count, setCount] = useState(total);
+  const [count, setCount] = useState(() => countFor(initialCounts, filter));
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "positive" | "critical"; text: string } | null>(null);
@@ -172,10 +175,14 @@ export function PhotoWall({
 
   /** The wall as it stands, for callbacks that must not close over a stale copy. */
   const photosRef = useRef(photos);
-  /** Both counts as last seen, or null until the first check answers. */
-  const countsRef = useRef<Counts | null>(null);
-  /** The tally on screen, which starts as the one the server rendered. */
-  const countRef = useRef(count);
+  /**
+   * The revision and counts the wall on screen actually reflects.
+   *
+   * Seeded from the same read that produced the first page, so the very first
+   * check compares against the wall the guest is looking at rather than
+   * against nothing. Advanced only when the wall has been brought up to it.
+   */
+  const appliedRef = useRef<Counts>(initialCounts);
   useEffect(() => {
     photosRef.current = photos;
   }, [photos]);
@@ -209,7 +216,7 @@ export function PhotoWall({
    * behind a cursor that has already moved past them, reachable by no amount
    * of scrolling.
    */
-  const pullNewest = useCallback(async () => {
+  const pullNewest = useCallback(async (): Promise<{ added: PhotoView[]; complete: boolean }> => {
     const known = new Set(photosRef.current.map((p) => p.id));
     const fresh: PhotoView[] = [];
     let cursorAt: string | null = null;
@@ -219,11 +226,17 @@ export function PhotoWall({
       const { added, reachedKnown } = newHead(known, got.photos);
       fresh.push(...added);
 
-      if (reachedKnown || got.done || !got.cursor) return fresh;
+      if (reachedKnown || got.done || !got.cursor) return { added: fresh, complete: true };
       cursorAt = got.cursor;
     }
 
-    return fresh;
+    /*
+     * Five pages of photos the wall has never seen and still no end in sight.
+     * Adding these would leave the ones past them stranded between the last
+     * one added and a cursor that has moved beyond both, so the caller starts
+     * again from the top instead.
+     */
+    return { added: fresh, complete: false };
   }, [filter]);
 
   /**
@@ -269,10 +282,12 @@ export function PhotoWall({
     let timer: ReturnType<typeof setTimeout> | undefined;
     let delay = POLL_MIN_MS;
     /*
-     * One check at a time, and only the newest one counts. Foregrounding a
-     * tab fires visibilitychange and focus together, and the timer may come
-     * due in the middle of either: without this, two checks race, both read
-     * the same "before" state, and both add the same photos.
+     * One check at a time, and one timer behind it. Foregrounding a tab fires
+     * visibilitychange and focus together and the timer may come due between
+     * them; left alone, each event starts a check and a chain of its own, and
+     * an evening of switching apps ends up polling several times a tick.
+     * Every path goes through `schedule`, which is the only thing that sets a
+     * timer and always clears the one before it.
      */
     let running = false;
     let generation = 0;
@@ -288,20 +303,21 @@ export function PhotoWall({
         if (stopped || mine !== generation) return;
 
         const visible = countFor(counts, filter);
-        const change = changeSince(countsRef.current, counts, {
-          before: countRef.current,
-          after: visible,
-        });
-        countsRef.current = counts;
-        countRef.current = visible;
         setCount(visible);
 
+        let change = changeSince(appliedRef.current, counts);
         if (change === "added") {
-          const added = await pullNewest();
-          // The wall may have moved on while those pages were in the air.
+          const { added, complete } = await pullNewest();
           if (stopped || mine !== generation) return;
-          if (added.length > 0) showPhotos([...added, ...photosRef.current]);
-        } else if (change === "rebuild") {
+          // Too many arrived at once to reach what we already had.
+          if (complete) {
+            if (added.length > 0) showPhotos([...added, ...photosRef.current]);
+          } else {
+            change = "rebuild";
+          }
+        }
+
+        if (change === "rebuild") {
           const page = await rebuild();
           if (stopped || mine !== generation) return;
           showPhotos(page.photos);
@@ -309,6 +325,14 @@ export function PhotoWall({
           setDone(page.done);
         }
 
+        /*
+         * Only now. Committing the revision before the wall matched it would
+         * turn one failed page request into a wall that is permanently a
+         * little out of date: the next check would compare against a revision
+         * nothing ever caught up to and find nothing to do. An error leaves
+         * the old revision in place, so the next check tries again.
+         */
+        appliedRef.current = counts;
         delay = nextDelay(delay, change !== "none");
       } catch {
         /*
@@ -322,23 +346,28 @@ export function PhotoWall({
       }
     };
 
+    /** The one timer. Setting a new wait always replaces the old one. */
+    const schedule = (wait: number) => {
+      clearTimeout(timer);
+      if (!stopped) timer = setTimeout(() => void tick(), wait);
+    };
+
     const tick = async () => {
       await check();
-      if (!stopped) timer = setTimeout(() => void tick(), delay);
+      if (!stopped) schedule(delay);
     };
-    timer = setTimeout(() => void tick(), delay);
+    schedule(delay);
 
     /*
      * Coming back to the tab is the moment a guest most expects to see what
-     * they missed: check at once, from the fast end of the scale, and let
-     * the timer start again from there rather than firing on its old
-     * schedule a second later.
+     * they missed: check at once, from the fast end of the scale. A check
+     * already under way owns the schedule and will set the next wait itself,
+     * so waking during one does nothing rather than starting a second chain.
      */
     const onWake = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || running) return;
       delay = POLL_MIN_MS;
-      clearTimeout(timer);
-      void tick();
+      schedule(0);
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);

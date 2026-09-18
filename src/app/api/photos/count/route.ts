@@ -76,11 +76,12 @@ export async function GET() {
   if (!state.visible && caller.role !== "host") return refuse("closed", 403);
 
   try {
-    const { live, hidden } = await totals();
+    const { rev, live, hidden } = await totals();
     return NextResponse.json(
       // How many photos a guest cannot see is the hosts' business, and a
-      // guest's wall has no use for it.
-      caller.role === "host" ? { live, hidden } : { live },
+      // guest's wall has no use for it. The revision goes to both: it is a
+      // count of writes, and says nothing about what they were.
+      caller.role === "host" ? { rev, live, hidden } : { rev, live },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

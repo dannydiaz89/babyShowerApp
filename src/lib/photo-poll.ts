@@ -39,7 +39,11 @@ export const MAX_HEAD_PAGES = 5;
  */
 export const MAX_REBUILD_PAGES = 8;
 
-export type Counts = { live: number; hidden?: number };
+/**
+ * What a check learns: how many writes the wall has seen, and the tallies to
+ * put above it. `hidden` reaches hosts only.
+ */
+export type Counts = { rev: number; live: number; hidden?: number };
 
 /**
  * The wait after a check.
@@ -51,19 +55,6 @@ export type Counts = { live: number; hidden?: number };
 export function nextDelay(current: number, changed: boolean): number {
   if (changed) return POLL_MIN_MS;
   return Math.min(POLL_MAX_MS, Math.round(current * GROWTH));
-}
-
-/**
- * What the wall compares between checks.
- *
- * Both numbers, not the one this filter happens to show. A hide moves a
- * photo from live to hidden: on the host's "all" wall neither the sum nor
- * the visible tally moves, and the photo has quietly changed underneath. A
- * guest is only ever told `live`, which is the only number that can change
- * anything they can see.
- */
-export function signature(counts: Counts): string {
-  return counts.hidden === undefined ? `${counts.live}` : `${counts.live}:${counts.hidden}`;
 }
 
 /** How many photos this filter says exist, for the header above the wall. */
@@ -80,29 +71,26 @@ export type Change = "none" | "added" | "rebuild";
  * Whether the wall can catch up by adding to the front, or has to be read
  * again.
  *
- * Adding is the common case and costs a page: photos arrive, and everything
- * already on screen is still there, still in the same order. Anything else —
- * a photo hidden, deleted, or restored — can only be seen by reading the wall
- * again, because what changed is a photo already on screen and a page fetched
- * from the head may never reach it.
+ * The revision answers "did anything happen", which counts cannot: a photo
+ * added and another deleted between two checks leaves every tally where it
+ * was. The counts then answer "was it only arrivals" — the one case that can
+ * be served by adding to the front, because everything already on screen is
+ * still there and still in order.
  *
- * `before` is null on the first check after the page loads: there is no pair
- * of counts to compare yet, only the tally the server rendered with, so the
- * decision falls back to whether that tally went up or down.
+ * "Only arrivals" is exact rather than approximate: each write moves the
+ * revision by one, so three arrivals and nothing else means the revision
+ * moved by three and the live count rose by three. An upload paired with a
+ * delete moves the revision by two and the count by none, and is rebuilt —
+ * the deleted photo is somewhere in the middle of the wall, where nothing
+ * fetched from the head would ever reach it.
  */
-export function changeSince(
-  before: Counts | null,
-  after: Counts,
-  visible: { before: number; after: number }
-): Change {
-  if (before) {
-    if (signature(before) === signature(after)) return "none";
-    const gone = after.live < before.live || (after.hidden ?? 0) !== (before.hidden ?? 0);
-    return gone ? "rebuild" : "added";
-  }
+export function changeSince(before: Counts, after: Counts): Change {
+  const writes = after.rev - before.rev;
+  if (writes === 0) return "none";
 
-  if (visible.after === visible.before) return "none";
-  return visible.after < visible.before ? "rebuild" : "added";
+  const arrived = after.live - before.live;
+  const hiddenMoved = (after.hidden ?? 0) !== (before.hidden ?? 0);
+  return arrived === writes && arrived > 0 && !hiddenMoved ? "added" : "rebuild";
 }
 
 /**

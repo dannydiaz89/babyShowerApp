@@ -203,6 +203,18 @@ export default defineSchema({
     hidden: v.number(),
     /** Web-copy bytes across live and hidden photos, against the storage cap. Optional: older rows read as 0. */
     bytes: v.optional(v.number()),
+    /*
+     * Bumped by every photo write, in that write's own transaction.
+     *
+     * The counts alone cannot say whether anything happened: a photo added
+     * and another deleted between two reads leaves both numbers where they
+     * were, and a wall watching the numbers would never know to catch up.
+     * This only ever goes up, so any two readings that differ mean the wall
+     * has changed, and by how many writes. Housekeeping — the storage sweep,
+     * a cursor — deliberately does not touch it. Optional: rows written
+     * before it existed read as 0.
+     */
+    rev: v.optional(v.number()),
     /** When stored copies were last swept for ones no photo points at. */
     lastSweptAt: v.optional(v.number()),
     /** Where the sweep left off in the storage listing; absent means start over. */

@@ -67,8 +67,10 @@ const totalsValidator = v.object({
   hidden: v.number(),
   /** Web-copy bytes in the site's storage, live and hidden together. */
   bytes: v.number(),
+  /** How many photo writes this wall has seen. See the schema. */
+  rev: v.number(),
 });
-export type PhotoTotals = { live: number; hidden: number; bytes: number };
+export type PhotoTotals = { live: number; hidden: number; bytes: number; rev: number };
 
 /* ------------------------------------------------------------------ totals */
 
@@ -94,9 +96,12 @@ async function adjustTotals(
   const live = Math.max(0, (existing?.live ?? 0) + (delta.live ?? 0));
   const hidden = Math.max(0, (existing?.hidden ?? 0) + (delta.hidden ?? 0));
   const bytes = Math.max(0, (existing?.bytes ?? 0) + (delta.bytes ?? 0));
+  // One per write, in the write's own transaction, so a wall that reads two
+  // different numbers knows something happened even when the counts agree.
+  const rev = (existing?.rev ?? 0) + 1;
 
-  if (existing) await ctx.db.patch(existing._id, { live, hidden, bytes });
-  else await ctx.db.insert("photoTotals", { singleton: "photos", live, hidden, bytes });
+  if (existing) await ctx.db.patch(existing._id, { live, hidden, bytes, rev });
+  else await ctx.db.insert("photoTotals", { singleton: "photos", live, hidden, bytes, rev });
 }
 
 /* -------------------------------------------------------------------- view */
@@ -481,7 +486,12 @@ export const totals = query({
   handler: async (ctx, { key }) => {
     assertServer(key);
     const row = await totalsRow(ctx);
-    return { live: row?.live ?? 0, hidden: row?.hidden ?? 0, bytes: row?.bytes ?? 0 };
+    return {
+      live: row?.live ?? 0,
+      hidden: row?.hidden ?? 0,
+      bytes: row?.bytes ?? 0,
+      rev: row?.rev ?? 0,
+    };
   },
 });
 
